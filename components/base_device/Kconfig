@@ -1,0 +1,27 @@
+menu "Device Selectionaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    
+	choice DEVICE_SELECTION
+	    prompt "Device Selection"
+	    default MY_CHOICE_OPTION1
+	    help
+	        This is a help.
+	
+	    config DEVICE_TD01
+	        bool "TD01"
+	        help
+	            help for option1
+	            
+	    config DEVICE_TJS
+	        bool "TJS"
+	        help
+	        	help for option2
+
+		config DEVICE_DIANJI
+	        bool "DIANJI"
+	        help
+	        	help for option3
+	        	
+	endchoice
+
+endmenu
+  

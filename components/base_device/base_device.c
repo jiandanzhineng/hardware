@@ -35,14 +35,20 @@ static void heartbeat_task(void)
     while(1) {
         report_all_properties();
         // print the time since boot
-        
         vTaskDelay(pdMS_TO_TICKS(10000));
-        ESP_LOGI(TAG, "uptime: %lld, no message time: %lld", esp_timer_get_time() / 1000000, esp_timer_get_time() / 1000000 - last_msg_time);
+    }
+}
+
+static void sleep_check_task(void){
+    while(1) {
+        vTaskDelay(pdMS_TO_TICKS(10000));
+        ESP_LOGI(TAG, "uptime: %lld, no message time: %lld/%d", esp_timer_get_time() / 1000000, esp_timer_get_time() / 1000000 - last_msg_time, sleep_time_property.value.int_value);
         if(esp_timer_get_time() / 1000000 - last_msg_time > sleep_time_property.value.int_value){
             ESP_LOGI(TAG, "long time no message, deep sleep");
             esp_deep_sleep_start();
         }
     }
+
 }
 
 static void report_all_properties(void){
@@ -85,7 +91,9 @@ void device_init(void)
     sleep_time_property.writeable = true;
     strcpy(sleep_time_property.name, "sleep_time");
     sleep_time_property.value_type = PROPERTY_TYPE_INT;
-    sleep_time_property.value.int_value = 20;
+    sleep_time_property.value.int_value = 3600;
+
+    xTaskCreate(sleep_check_task, "sleep_check_task", 1024 * 2, NULL, 10, NULL);
 
     on_device_init();
 
@@ -143,15 +151,12 @@ void mqtt_msg_process(char *topic, int topic_len, char *data, int data_len)
                 // get property
                 get_property(key, msg_id);
             }
-        }else if(strcmp(method, "action") == 0){
-            // get action
-            if (cJSON_GetObjectItem(root, "action"))
-            {
-                // do action
-                on_action(root);
-            }
+        }else{
+            // do action
+            on_action(root);
         }
     }
+    on_mqtt_msg_process(topic, root);
     // free cJSON
     cJSON_Delete(root);
     last_msg_time = esp_timer_get_time() / 1000000;

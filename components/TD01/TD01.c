@@ -6,6 +6,7 @@
 #include "driver/ledc.h"
 #include "esp_timer.h"
 #include "device_common.h"
+#include "cJSON.h"
 
 #define DIMMABLE_GPIO_0 GPIO_NUM_6
 #define DIMMABLE_GPIO_1 GPIO_NUM_7
@@ -56,7 +57,7 @@ void button_single_click_cb(void *arg,void *usr_data)
     free(json_data);
 }
 
-void on_mqtt_msg_process(char *topic, int topic_len, char *data, int data_len){
+void on_mqtt_msg_process(char *topic, cJSON *root){
 
 }
 void on_set_property(char *property_name, cJSON *property_value, int msg_id){

@@ -25,6 +25,8 @@ typedef struct device_property {
     int readable;
     int writeable;
     int busy;
+    int min;
+    int max;
     char name[PROPERTY_NAME_MAX];
     int value_type;
     union {

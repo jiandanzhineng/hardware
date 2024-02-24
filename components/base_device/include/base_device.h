@@ -8,17 +8,30 @@
 
 #define DEVICE_TJS 1
 #define DEVICE_TD01 2
-#define DEVICE_TYPE_INDEX DEVICE_TD01
+#define DEVICE_DIANJI 3
 
-#if DEVICE_TYPE_INDEX == DEVICE_TJS
-    #define DEVICE_TYPE_NAME "TJS"
-    #include "tjs.h"
-#elif DEVICE_TYPE_INDEX == DEVICE_TD01
+
+#ifdef CONFIG_DEVICE_TD01
+    #define DEVICE_TYPE_INDEX DEVICE_TD01
     #define DEVICE_TYPE_NAME "TD01"
     #include "TD01.h"
 #endif
 
+#ifdef CONFIG_DEVICE_TJS
+    #define DEVICE_TYPE_INDEX DEVICE_TJS
+    #define DEVICE_TYPE_NAME "TJS"
+    #include "tjs.h"
+#endif
 
+#ifdef CONFIG_DEVICE_DIANJI
+    #define DEVICE_TYPE_INDEX DEVICE_DIANJI
+    #define DEVICE_TYPE_NAME "DIANJI"
+    #include "dianji.h"
+#endif
+
+#ifndef DEVICE_TYPE_INDEX  
+    #error "Please select a device type in menuconfig."  
+#endif
     
 
 void mqtt_msg_process(char *topic, int topic_len, char *data, int data_len);
@@ -28,3 +41,4 @@ void device_init(void);
 void device_first_ready(void);
 static void report_all_properties(void);
 static void heartbeat_task(void);
+static void sleep_check_task(void);
