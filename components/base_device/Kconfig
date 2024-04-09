@@ -2,7 +2,7 @@ menu "Device Selectionaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     
 	choice DEVICE_SELECTION
 	    prompt "Device Selection"
-	    default MY_CHOICE_OPTION1
+	    default DEVICE_QTZ
 	    help
 	        This is a help.
 	
@@ -20,6 +20,11 @@ menu "Device Selectionaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	        bool "DIANJI"
 	        help
 	        	help for option3
+
+		config DEVICE_QTZ
+			bool "QTZ"
+			help
+				help for option4
 	        	
 	endchoice
 

@@ -1,4 +1,23 @@
 #include "base_device.h"
+#ifdef CONFIG_DEVICE_TD01
+    #include "TD01.h"
+#endif
+
+#ifdef CONFIG_DEVICE_TJS
+    #include "tjs.h"
+#endif
+
+#ifdef CONFIG_DEVICE_DIANJI
+    #include "dianji.h"
+#endif
+
+#ifdef CONFIG_DEVICE_QTZ
+    #include "qtz.h"
+#endif
+
+#ifndef CONFIG_DEVICE_QTZ
+    #error "Please select a device type in menuconfig."
+#endif
 #include "esp_log.h"
 #include "iot_button.h"
 #include "driver/gpio.h"
@@ -237,4 +256,12 @@ void get_property(char *property_name, int msg_id)
     // release memory
     cJSON_Delete(root);
     free(json_str);
+}
+
+void mqtt_publish(cJSON *root){
+    char *json_data = cJSON_Print(root);
+    ESP_LOGI(TAG, "json_data: %s", json_data);
+    esp_mqtt_client_publish(smqtt_client, publish_topic, json_data, 0, 1, 0);
+    cJSON_Delete(root);
+    free(json_data);
 }

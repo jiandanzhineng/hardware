@@ -70,8 +70,8 @@ void on_set_property(char *property_name, cJSON *property_value, int msg_id){
 }
 
 void on_device_init(void){
-    ESP_LOGI(TAG, "on_device_init num:%d",device_properties_num);
-        // init power1_property, it is a int between 0 and 255
+    ESP_LOGI(TAG, "on_device_init property num:%d",device_properties_num);
+    // init power1_property, it is a int between 0 and 255
     power1_property.readable = true;
     power1_property.writeable = true;
     strcpy(power1_property.name, "power1");
