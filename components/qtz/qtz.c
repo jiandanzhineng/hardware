@@ -19,8 +19,8 @@
 #include "nvs_flash.h"
 #include "nvs.h"
 
-#define Trig 0
-#define Echo 1
+#define Trig 6
+#define Echo 7
 #define GPIO_INPUT_IO_0 Echo
 #define GPIO_INPUT_PIN_SEL ((1ULL << GPIO_INPUT_IO_0))
 
