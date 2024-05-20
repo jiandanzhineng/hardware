@@ -3,9 +3,6 @@
 #include "cJSON.h"
 #include "driver/ledc.h"
 
-
-#include "qtz.h"
-
 #define DEVICE_TJS 1
 #define DEVICE_TD01 2
 #define DEVICE_DIANJI 3

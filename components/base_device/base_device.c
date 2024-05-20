@@ -15,9 +15,6 @@
     #include "qtz.h"
 #endif
 
-#ifndef CONFIG_DEVICE_QTZ
-    #error "Please select a device type in menuconfig."
-#endif
 #include "esp_log.h"
 #include "iot_button.h"
 #include "driver/gpio.h"

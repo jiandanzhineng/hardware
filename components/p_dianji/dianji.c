@@ -91,7 +91,7 @@ void on_device_init(void){
     voltage_property.writeable = true;
     strcpy(voltage_property.name, "voltage");
     voltage_property.value_type = PROPERTY_TYPE_INT;
-    voltage_property.value.int_value = 500;
+    voltage_property.value.int_value = 0;
     voltage_property.max = 500;
     voltage_property.min = 0;
 

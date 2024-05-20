@@ -1,16 +1,32 @@
+
+set(BASE_COP "device_common" "mqtt" "json" "button")
 if(CONFIG_DEVICE_TD01)
-    set(REQUIRES "TD01")
+    message(STATUS "CONFIG_DEVICE_TD01")
+    set(COP "TD01")
 elseif(CONFIG_DEVICE_TJS)
-    set(REQUIRES "tjs")
+    set(COP "tjs")
 elseif(CONFIG_DEVICE_DIANJI)
-    set(REQUIRES "p_dianji")
+    set(COP "p_dianji")
 elseif(CONFIG_DEVICE_QTZ)
-    set(REQUIRES "qtz")
+    set(COP "qtz")
+else()
+    #message(FATAL_ERROR "Please select a device type")
 endif()
 
-idf_component_register(SRCS "base_device.c"
-                        INCLUDE_DIRS "include"
-                        REQUIRES "device_common" "mqtt" "json" "button" "qtz" ${REQUIRES})
+
+
+if(CMAKE_BUILD_EARLY_EXPANSION)
+    idf_component_register(SRCS "base_device.c"
+                            INCLUDE_DIRS "include"
+                            REQUIRES "device_common" "mqtt" "json" "button" "TD01" "tjs" "p_dianji" "qtz")
+else()
+    idf_component_register(SRCS "base_device.c"
+                            INCLUDE_DIRS "include"
+                            REQUIRES "device_common" "mqtt" "json" "button" ${COP})
+endif()
+
+message(STATUS "COP: ${COP}")
+
 
 
 
