@@ -24,12 +24,17 @@
 #include "single_device_common.h"
 #include "esp_sleep.h"
 
+#include "esp_heap_caps.h"
+
+#include "Battery.h"
+
 static const char *TAG = "base_device";
 
 
 // property list
 device_property_t device_type_property;
 device_property_t sleep_time_property;
+device_property_t battery_property;
 extern device_property_t *device_properties[];
 extern int device_properties_num;
 
@@ -43,6 +48,10 @@ void device_first_ready(void)
     xTaskCreate(heartbeat_task, "heartbeat_task", 1024 * 2, NULL, 10, NULL);
 
     on_device_first_ready();
+    #ifdef BATTERY_ADC_EN
+    gpio_reset_pin(BATTERY_ADC_EN);
+    gpio_set_direction(BATTERY_ADC_EN, GPIO_MODE_OUTPUT);
+    #endif
 }
 
 static void heartbeat_task(void)
@@ -63,6 +72,11 @@ static void sleep_check_task(void){
             ESP_LOGI(TAG, "long time no message, deep sleep");
             esp_deep_sleep_start();
         }
+        #ifdef BATTERY_ADC_EN
+        uint8_t BatteryVoltagePer;
+        battery_adc_get_value(&BatteryVoltagePer);
+        battery_property.value.int_value = BatteryVoltagePer;
+        #endif
     }
 
 }
@@ -72,6 +86,11 @@ static void report_all_properties(void){
     // build json
     cJSON *root = cJSON_CreateObject();
     cJSON_AddStringToObject(root, "method", "report");
+    #ifdef DEBUG_HEAP
+    char memeory_info[64];
+    sprintf(memeory_info, "heap_caps_get_free_size: %d", heap_caps_get_free_size(MALLOC_CAP_8BIT));
+    cJSON_AddStringToObject(root, "memory_info", memeory_info);
+    #endif
     // cJSON_AddStringToObject(root, "device_type", device_type_property.value.string_value);
     for(int i = 0; i< device_properties_num; i++){
         if(device_properties[i]->value_type == PROPERTY_TYPE_INT){
@@ -109,6 +128,12 @@ void device_init(void)
     sleep_time_property.value_type = PROPERTY_TYPE_INT;
     sleep_time_property.value.int_value = 3600;
 
+    battery_property.readable = true;
+    battery_property.writeable = false;
+    strcpy(battery_property.name, "battery");
+    battery_property.value_type = PROPERTY_TYPE_INT;
+    battery_property.value.int_value = 0;
+
     xTaskCreate(sleep_check_task, "sleep_check_task", 1024 * 2, NULL, 10, NULL);
 
     on_device_init();
@@ -137,7 +162,7 @@ void mqtt_msg_process(char *topic, int topic_len, char *data, int data_len)
     if (cJSON_GetObjectItem(root, "method"))
     {
         char *method = cJSON_GetObjectItem(root, "method")->valuestring;
-        ESP_LOGI(TAG, "method: %s", method);
+        //ESP_LOGI(TAG, "method: %s", method);
         // if method is set, then set property
         if (strcmp(method, "set") == 0)
         {
@@ -145,12 +170,12 @@ void mqtt_msg_process(char *topic, int topic_len, char *data, int data_len)
             if (cJSON_GetObjectItem(root, "key"))
             {
                 char *key = cJSON_GetObjectItem(root, "key")->valuestring;
-                ESP_LOGI(TAG, "key: %s", key);
+                //ESP_LOGI(TAG, "key: %s", key);
                 // get value
                 if (cJSON_GetObjectItem(root, "value"))
                 {
                     cJSON *value = cJSON_GetObjectItem(root, "value");
-                    ESP_LOGI(TAG, "value: %s", cJSON_Print(value));
+
                     // set property
                     set_property(key, value, msg_id);
                 }
@@ -163,7 +188,7 @@ void mqtt_msg_process(char *topic, int topic_len, char *data, int data_len)
             if (cJSON_GetObjectItem(root, "key"))
             {
                 char *key = cJSON_GetObjectItem(root, "key")->valuestring;
-                ESP_LOGI(TAG, "key: %s", key);
+                //ESP_LOGI(TAG, "key: %s", key);
                 // get property
                 get_property(key, msg_id);
             }
@@ -180,7 +205,9 @@ void mqtt_msg_process(char *topic, int topic_len, char *data, int data_len)
 
 void set_property(char *property_name, cJSON *property_value, int msg_id)
 {
-    ESP_LOGI(TAG, "set_property property_name: %s, property_value: %s", property_name, cJSON_Print(property_value));
+    char *json_string = cJSON_Print(property_value);
+    ESP_LOGI(TAG, "set_property property_name: %s, property_value: %s", property_name, json_string);
+    free(json_string);
     device_property_t *property = NULL;
     for(int i = 0; i < device_properties_num; i++){
         if(strcmp(property_name, device_properties[i]->name) == 0){
@@ -192,7 +219,7 @@ void set_property(char *property_name, cJSON *property_value, int msg_id)
         ESP_LOGE(TAG, "property_name: %s is not supported", property_name);
         return;
     }
-
+    
     if (property->value_type == PROPERTY_TYPE_INT)
     {
         property->value.int_value = property_value->valueint;
@@ -210,8 +237,6 @@ void set_property(char *property_name, cJSON *property_value, int msg_id)
         ESP_LOGE(TAG, "property->value_type: %d is not supported", property->value_type);
         return;
     }
-    // publish property
-    //get_property(property_name, msg_id);
     on_set_property(property_name, property_value, msg_id);
 }
 

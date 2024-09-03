@@ -1,5 +1,5 @@
 
-set(BASE_COP "device_common" "mqtt" "json" "button")
+set(BASE_COP "device_common" "mqtt" "json" "button" "Battery")
 if(CONFIG_DEVICE_TD01)
     message(STATUS "CONFIG_DEVICE_TD01")
     set(COP "TD01")
@@ -18,11 +18,11 @@ endif()
 if(CMAKE_BUILD_EARLY_EXPANSION)
     idf_component_register(SRCS "base_device.c"
                             INCLUDE_DIRS "include"
-                            REQUIRES "device_common" "mqtt" "json" "button" "TD01" "tjs" "p_dianji" "qtz")
+                            REQUIRES "device_common" "mqtt" "json" "button" "Battery" "TD01" "tjs" "p_dianji" "qtz")
 else()
     idf_component_register(SRCS "base_device.c"
                             INCLUDE_DIRS "include"
-                            REQUIRES "device_common" "mqtt" "json" "button" ${COP})
+                            REQUIRES "device_common" "mqtt" "json" "button" "Battery" ${COP})
 endif()
 
 message(STATUS "COP: ${COP}")

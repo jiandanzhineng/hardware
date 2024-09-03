@@ -33,12 +33,14 @@ device_property_t power1_property;
 device_property_t power2_property;
 extern device_property_t device_type_property;
 extern device_property_t sleep_time_property;
+extern device_property_t battery_property;
 
 device_property_t *device_properties[] = {
     &device_type_property,
     &power1_property,
     &power2_property,
     &sleep_time_property,
+    &battery_property,
 };
 
 int device_properties_num = sizeof(device_properties) / sizeof(device_properties[0]);
@@ -60,8 +62,9 @@ void button_single_click_cb(void *arg,void *usr_data)
 void on_mqtt_msg_process(char *topic, cJSON *root){
 
 }
+
 void on_set_property(char *property_name, cJSON *property_value, int msg_id){
-    ESP_LOGI(TAG, "on_set_property property_name:%s", property_name);
+    //ESP_LOGI(TAG, "on_set_property property_name:%s", property_name);
     if(strcmp(property_name, "power1") == 0){
         control_ledc(LEDC_CHANNEL_0, power1_property.value.int_value);
     }else if(strcmp(property_name, "power2") == 0){
@@ -112,13 +115,14 @@ void on_action(cJSON *root){
 
 void control_ledc(ledc_channel_t channel, uint32_t duty)
 {
-    ESP_LOGI(TAG, "control_ledc CHANNEL: %d DUTY: %ld", channel, duty);
+    //ESP_LOGI(TAG, "control_ledc CHANNEL: %d DUTY: %ld", channel, duty);
     
     if(duty<2)duty=0;
     else if(duty>254)duty = 8191;
     else{
         duty = duty * 9 + 5897;
     }
+    duty = 8191 - duty;
     ESP_ERROR_CHECK(ledc_set_duty(LEDC_MODE, channel, duty));
     // Update duty to apply the new value
     ESP_ERROR_CHECK(ledc_update_duty(LEDC_MODE, channel));

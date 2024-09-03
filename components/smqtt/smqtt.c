@@ -1,4 +1,5 @@
 #include "smqtt.h"
+#include "esp_system.h"
 
 static const char *TAG = "SMQTT";
 esp_mqtt_client_handle_t smqtt_client;
@@ -37,13 +38,13 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         msg_id = esp_mqtt_client_subscribe(client, "/all", 0);
         ESP_LOGI(TAG, "sent subscribe successful, topic is /all, msg_id=%d", msg_id);
         /*subscibe topic: /drecv/{mac} */
-        
         msg_id = esp_mqtt_client_subscribe(client, recv_topic, 0);
         ESP_LOGI(TAG, "sent subscribe successful, topic is %s, msg_id=%d", publish_topic, msg_id);
         device_first_ready();
         break;
     case MQTT_EVENT_DISCONNECTED:
         ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
+        //esp_restart();
         break;
     case MQTT_EVENT_SUBSCRIBED:
         ESP_LOGI(TAG, "MQTT_EVENT_SUBSCRIBED, msg_id=%d", event->msg_id);
@@ -55,7 +56,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         ESP_LOGI(TAG, "MQTT_EVENT_PUBLISHED, msg_id=%d", event->msg_id);
         break;
     case MQTT_EVENT_DATA:
-        ESP_LOGI(TAG, "MQTT_EVENT_DATA");
+        //ESP_LOGI(TAG, "MQTT_EVENT_DATA");
         //printf("TOPIC=%.*s\r\n", event->topic_len, event->topic);
         //printf("DATA=%.*s\r\n", event->data_len, event->data);
         mqtt_msg_process(event->topic, event->topic_len, event->data, event->data_len);
@@ -69,6 +70,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             log_error_if_nonzero("captured as transport's socket errno", event->error_handle->esp_transport_sock_errno);
             ESP_LOGI(TAG, "Last errno string (%s)", strerror(event->error_handle->esp_transport_sock_errno));
         }
+        //esp_restart();
         break;
     default:
         ESP_LOGI(TAG, "Other event id:%d", event->event_id);

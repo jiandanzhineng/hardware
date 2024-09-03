@@ -36,6 +36,8 @@
 // self make header
 #include "smqtt.h"
 
+#include "driver/gpio.h"
+
 #define EXAMPLE_WIFI_CONNECTION_MAXIMUM_RETRY CONFIG_EXAMPLE_WIFI_CONNECTION_MAXIMUM_RETRY
 #define EXAMPLE_INVALID_REASON 255
 #define EXAMPLE_INVALID_RSSI -128
@@ -532,6 +534,15 @@ void app_main(void)
 {
     esp_err_t ret;
 
+    gpio_reset_pin(12);
+    gpio_set_direction(12, GPIO_MODE_OUTPUT);
+    gpio_set_level(12, 1);
+    vTaskDelay(100 / portTICK_PERIOD_MS);
+    gpio_set_level(12, 0);
+
+
+
+
     // Initialize NVS
     ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND)
@@ -571,5 +582,13 @@ void app_main(void)
     get_mac_address();
 
     device_init();
+
+    // set GPIO12 high
+    gpio_set_level(12, 1);
+    while (1)
+    {
+        vTaskDelay(1000 / portTICK_PERIOD_MS);
+    }
+    
     
 }
