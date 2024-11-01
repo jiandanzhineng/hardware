@@ -12,32 +12,31 @@
 #ifdef CONFIG_DEVICE_TD01
     #define DEVICE_TYPE_INDEX DEVICE_TD01
     #define DEVICE_TYPE_NAME "TD01"
-    #include "TD01.h"
 #endif
 
 #ifdef CONFIG_DEVICE_TJS
     #define DEVICE_TYPE_INDEX DEVICE_TJS
     #define DEVICE_TYPE_NAME "TJS"
-    #include "tjs.h"
 #endif
 
 #ifdef CONFIG_DEVICE_DIANJI
     #define DEVICE_TYPE_INDEX DEVICE_DIANJI
     #define DEVICE_TYPE_NAME "DIANJI"
-    #include "dianji.h"
 #endif
 
 #ifdef CONFIG_DEVICE_QTZ
     #define DEVICE_TYPE_INDEX DEVICE_QTZ
     #define DEVICE_TYPE_NAME "QTZ"
-    #include "qtz.h"
 #endif
 
 
 #ifndef DEVICE_TYPE_INDEX  
     #error "Please select a device type in menuconfig."  
 #endif
+
+#pragma message "DEVICE_TYPE_NAME: " DEVICE_TYPE_NAME
     
+
 
 void mqtt_msg_process(char *topic, int topic_len, char *data, int data_len);
 void set_property(char *property_name, cJSON *property_value, int msg_id);

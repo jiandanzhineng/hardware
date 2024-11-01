@@ -1,19 +1,5 @@
 #include "base_device.h"
-#ifdef CONFIG_DEVICE_TD01
-    #include "TD01.h"
-#endif
-
-#ifdef CONFIG_DEVICE_TJS
-    #include "tjs.h"
-#endif
-
-#ifdef CONFIG_DEVICE_DIANJI
-    #include "dianji.h"
-#endif
-
-#ifdef CONFIG_DEVICE_QTZ
-    #include "qtz.h"
-#endif
+#include "dianji.h"
 
 #include "esp_log.h"
 #include "iot_button.h"
@@ -21,7 +7,6 @@
 #include "driver/ledc.h"
 #include "esp_timer.h"
 #include "device_common.h"
-#include "single_device_common.h"
 #include "esp_sleep.h"
 
 #include "esp_heap_caps.h"
@@ -36,7 +21,7 @@ device_property_t device_type_property;
 device_property_t sleep_time_property;
 device_property_t battery_property;
 extern device_property_t *device_properties[];
-extern int device_properties_num;
+
 
 long long last_msg_time = 0;
 

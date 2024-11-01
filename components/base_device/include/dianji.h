@@ -6,6 +6,8 @@
 #include "esp_adc/adc_cali_scheme.h"
 #define USER_ADC1_CHAN ADC_CHANNEL_4
 
+extern int device_properties_num;
+
 static void button_single_click_cb(void *arg,void *usr_data);
 static void report_all_properties(void);
 static void heartbeat_task(void);

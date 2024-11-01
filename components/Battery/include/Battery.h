@@ -19,6 +19,11 @@
 #define BATTERY_ADC_CHANNEL ADC_CHANNEL_0
 #endif
 
+#ifdef CONFIG_DEVICE_DIANJI
+#define BATTERY_ADC_EN GPIO_NUM_1
+#define BATTERY_ADC_CHANNEL ADC_CHANNEL_0
+#endif
+
 #define ARRAY_DIM(a) (sizeof(a) / sizeof((a)[0]))
 
 #define RESISTANCE_VOLTAGE_DIVIDER (3.69)

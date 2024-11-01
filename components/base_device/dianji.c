@@ -1,7 +1,6 @@
-#include "dianji.h"
 #include "device_common.h"
-#include "single_device_common.h"
 #include "esp_log.h"
+#include "dianji.h"
 
 
 #include "driver/gpio.h"
@@ -19,6 +18,14 @@
 #include "driver/ledc.h"
 #include "driver/adc.h"
 #include "esp_adc_cal.h"
+
+#include "cJSON.h"
+#include "driver/ledc.h"
+
+#include "esp_adc/adc_oneshot.h"
+#include "esp_adc/adc_cali.h"
+#include "esp_adc/adc_cali_scheme.h"
+#define USER_ADC1_CHAN ADC_CHANNEL_4
 
 
 #define OUTPUT_TIME 100
@@ -43,9 +50,6 @@ device_property_t *device_properties[] = {
 };
 
 int device_properties_num = sizeof(device_properties) / sizeof(device_properties[0]);
-
-
-
 
 void on_mqtt_msg_process(char *topic, cJSON *root){
 
