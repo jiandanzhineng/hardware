@@ -326,7 +326,7 @@ void printf_flag(void *arg)
     while (1)
     {
         flag = 1;
-        printf("%d,%f,%d\n", F, V, target_v);
+        printf("old:%d,%f,%d\n", F, V, target_v);
         delay_ms(100);
     }
 }

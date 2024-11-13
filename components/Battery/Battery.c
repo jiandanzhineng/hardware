@@ -15,12 +15,17 @@ static void adc_calibration_deinit(adc_cali_handle_t handle);
 static esp_err_t battery_adc_init(void);
 static int toPercentage(int voltage);
 
+#define BATTERY_CLOSE_EN 1
+
 /*
  * @description:
  * @return {*}
  */
 esp_err_t battery_adc_get_value(uint8_t *VoltagePer)
 {
+    #ifdef BATTERY_CLOSE_EN
+    return ESP_OK;
+    #endif
     battery_adc_init();
 
     ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, BATTERY_ADC_CHANNEL, &adc_raw));
@@ -53,7 +58,10 @@ esp_err_t battery_adc_get_value(uint8_t *VoltagePer)
  */
 static esp_err_t battery_adc_init(void)
 {
-
+    #ifdef BATTERY_CLOSE_EN
+    return ESP_OK;
+    #endif
+    
     gpio_set_level(BATTERY_ADC_EN, 1);
 
     // init adc
@@ -87,6 +95,9 @@ static esp_err_t battery_adc_init(void)
  */
 static bool adc_calibration_init(adc_unit_t unit, adc_atten_t atten, adc_cali_handle_t *out_handle)
 {
+    #ifdef BATTERY_CLOSE_EN
+    return true;
+    #endif
     adc_cali_handle_t handle = NULL;
     esp_err_t ret = ESP_FAIL;
     bool calibrated = false;

@@ -2,7 +2,6 @@
 #include "esp_log.h"
 #include "dianji.h"
 
-
 #include "driver/gpio.h"
 #include "driver/ledc.h"
 #include "esp_timer.h"
@@ -27,13 +26,9 @@
 #include "esp_adc/adc_cali_scheme.h"
 #define USER_ADC1_CHAN ADC_CHANNEL_4
 
-
 #define OUTPUT_TIME 100
 
-
-
 static const char *TAG = "dianji";
-
 
 device_property_t voltage_property;
 device_property_t delay_property;
@@ -51,18 +46,19 @@ device_property_t *device_properties[] = {
 
 int device_properties_num = sizeof(device_properties) / sizeof(device_properties[0]);
 
-void on_mqtt_msg_process(char *topic, cJSON *root){
-
+void on_mqtt_msg_process(char *topic, cJSON *root)
+{
 }
-void on_set_property(char *property_name, cJSON *property_value, int msg_id){
+void on_set_property(char *property_name, cJSON *property_value, int msg_id)
+{
     ESP_LOGI(TAG, "on_set_property property_name:%s", property_name);
 }
 
-
-
-void on_action(cJSON *root){
+void on_action(cJSON *root)
+{
     char *method = cJSON_GetObjectItem(root, "method")->valuestring;
-    if(strcmp(method, "dian") == 0){
+    if (strcmp(method, "dian") == 0)
+    {
         int time = cJSON_GetObjectItem(root, "time")->valueint;
         int voltage = cJSON_GetObjectItem(root, "voltage")->valueint;
         voltage_property.value.int_value = voltage;
@@ -71,7 +67,7 @@ void on_action(cJSON *root){
         vTaskDelay(time / portTICK_PERIOD_MS);
         shock_property.value.int_value = 0;
         // control_ledc(LEDC_CHANNEL, (uint32_t)0);
-        ESP_LOGI(TAG, "dian end"); 
+        ESP_LOGI(TAG, "dian end");
     }
 }
 
@@ -135,7 +131,7 @@ float maxOutput = 140;
 
 // 通过两个输出引脚控制
 #define O1 3
-#define O2 13
+#define O2 19
 
 // PWM boost升压控制引脚
 #define PWM 10
@@ -278,26 +274,13 @@ void get_adc(void *arg)
             }
         }
 
-        if (fabs((float)V - (float)target_v) < 0.2)
+        if (fabs((float)V - (float)target_v) < 1)
         {
             target_flag = 1;
         }
         else
         {
             target_flag = 0;
-        }
-
-        delay_ms(10);
-    }
-}
-
-// pwm频率不断改变
-void pwm_output(void *arg)
-{
-    while (1)
-    {
-        if (F >= F_B && target_flag == 0)
-        {
             // 这里获取到被控对象的反馈值
             float feedbackValue = V;
             float targetValue = target_v;                 // 这里获取到目标值
@@ -315,9 +298,48 @@ void pwm_output(void *arg)
             if (F + output >= F_B)
             {
                 F = F + output;
-                ledc_set_freq(ledc_channel.speed_mode, ledc_channel.channel, F);
+                
             }
         }
+        
+        if(F > 30000){
+            F = 30000;
+        }else if(F < 100){
+            F = 100;
+        }
+
+        ledc_set_freq(ledc_channel.speed_mode, ledc_channel.channel, F);
+        delay_ms(10);
+    }
+}
+
+// pwm频率不断改变
+void pwm_output(void *arg)
+{
+    while (1)
+    {
+        // if (F >= F_B && target_flag == 0)
+        // {
+        //     // 这里获取到被控对象的反馈值
+        //     float feedbackValue = V;
+        //     float targetValue = target_v;                 // 这里获取到目标值
+        //     PID_Calc(&mypid, targetValue, feedbackValue); // 进行PID计算，结果在output成员变量中
+        //     float output = 0;
+        //     if (fabs(V - target_v) > 20)
+        //     {
+        //         output = 2.5 * mypid.output;
+        //     }
+        //     else
+        //     {
+        //         output = mypid.output;
+        //     }
+
+        //     if (F + output >= F_B)
+        //     {
+        //         F = F + output;
+        //         ledc_set_freq(ledc_channel.speed_mode, ledc_channel.channel, F);
+        //     }
+        // }
         delay_ms(20);
     }
 }
@@ -330,7 +352,7 @@ void printf_flag(void *arg)
     while (1)
     {
         flag = 1;
-        printf("%d,%f,%d\n", F, V, target_v);
+        printf("F:%d,V:%f,TV:%d\n", F, V, target_v);
         delay_ms(100);
     }
 }
@@ -387,7 +409,8 @@ void beat_task(void *arg)
     }
 }
 
-void on_device_init(void){
+void on_device_init(void)
+{
 
     ESP_LOGI(TAG, "device_init");
     // init power_property, it is a int between 0 and 500
@@ -421,6 +444,8 @@ void on_device_init(void){
     init_adc();
     // 初始化PWM
     init_pwm();
+
+    PID_Init(&mypid, kp, ki, kd, maxIntegral, maxOutput); // 初始化PID参数
     // ADC采集
     xTaskCreate(get_adc, "get_adc", 1024, NULL, 10, NULL);
 
@@ -431,17 +456,13 @@ void on_device_init(void){
     xTaskCreate(five_change, "five_change", 1024, NULL, 10, NULL);
     xTaskCreate(beat_task, "beat_task", 1024, NULL, 10, NULL);
 
-    PID_Init(&mypid, kp, ki, kd, maxIntegral, maxOutput); // 初始化PID参数
-
     while (1)
     {
-        printf("%d,%f,%d\n", F, V, begin_index);
         delay_ms(500);
     }
-    
-
 }
 
-void on_device_first_ready(void){
+void on_device_first_ready(void)
+{
     ESP_LOGI(TAG, "device_first_ready");
 }
