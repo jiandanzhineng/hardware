@@ -153,7 +153,7 @@ const int CHANGE_TIME = 5;
 const int V_CHANGE[6] = {V_CHANGE_01, V_CHANGE_02, V_CHANGE_03, V_CHANGE_04, V_CHANGE_03, V_CHANGE_02};
 
 // 每次放电次数
-const int V_TIME[6] = {1000, 200, 100, 80, 100, 200};
+const int V_TIME[6] = {200, 200, 200, 200, 200, 200};
 
 // 目标电压
 int target_v = V_CHANGE_01;
@@ -301,7 +301,7 @@ void get_adc(void *arg)
                 
             }
         }
-        
+
         if(F > 30000){
             F = 30000;
         }else if(F < 100){
@@ -393,7 +393,6 @@ void beat_task(void *arg)
             esp_rom_delay_us(OUTPUT_TIME);
             gpio_set_level(O1, 0);
             gpio_set_level(O2, 0);
-            delay_ms((1000 / V_TIME[begin_index]));
             first_flag = 1;
         }
         else
@@ -403,9 +402,9 @@ void beat_task(void *arg)
             esp_rom_delay_us(OUTPUT_TIME);
             gpio_set_level(O1, 0);
             gpio_set_level(O2, 0);
-            delay_ms((1000 / V_TIME[begin_index]));
             first_flag = 0;
         }
+        delay_ms((10));
     }
 }
 
