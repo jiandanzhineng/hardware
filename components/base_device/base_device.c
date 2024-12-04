@@ -33,7 +33,7 @@ void device_first_ready(void)
     xTaskCreate(heartbeat_task, "heartbeat_task", 1024 * 2, NULL, 10, NULL);
 
     on_device_first_ready();
-    #ifdef BATTERY_ADC_EN
+    #ifndef BATTERY_CLOSE_EN
     gpio_reset_pin(BATTERY_ADC_EN);
     gpio_set_direction(BATTERY_ADC_EN, GPIO_MODE_OUTPUT);
     #endif
@@ -57,7 +57,7 @@ static void sleep_check_task(void){
             ESP_LOGI(TAG, "long time no message, deep sleep");
             esp_deep_sleep_start();
         }
-        #ifdef BATTERY_ADC_EN
+        #ifndef BATTERY_CLOSE_EN
         uint8_t BatteryVoltagePer;
         battery_adc_get_value(&BatteryVoltagePer);
         battery_property.value.int_value = BatteryVoltagePer;

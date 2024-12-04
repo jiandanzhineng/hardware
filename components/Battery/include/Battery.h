@@ -22,6 +22,12 @@
 #ifdef CONFIG_DEVICE_DIANJI
 #define BATTERY_ADC_EN GPIO_NUM_1
 #define BATTERY_ADC_CHANNEL ADC_CHANNEL_0
+#define BATTERY_CLOSE_EN 1
+#endif
+
+
+#ifndef BATTERY_ADC_CHANNEL
+#define BATTERY_CLOSE_EN 1
 #endif
 
 #define ARRAY_DIM(a) (sizeof(a) / sizeof((a)[0]))

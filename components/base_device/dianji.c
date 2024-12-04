@@ -24,22 +24,28 @@
 #include "esp_adc/adc_oneshot.h"
 #include "esp_adc/adc_cali.h"
 #include "esp_adc/adc_cali_scheme.h"
+#include "driver/gpio.h"
 #define USER_ADC1_CHAN ADC_CHANNEL_4
 
 #define OUTPUT_TIME 100
 
 static const char *TAG = "dianji";
 
+//TODO: ble connect may fail
+//TODO: battery voltage may be wrong
+
 device_property_t voltage_property;
 device_property_t delay_property;
 device_property_t shock_property;
 extern device_property_t device_type_property;
 extern device_property_t sleep_time_property;
+extern device_property_t battery_property;
 
 device_property_t *device_properties[] = {
     &device_type_property,
     &sleep_time_property,
     &voltage_property,
+    &battery_property,
     &delay_property,
     &shock_property,
 };
@@ -137,6 +143,9 @@ float maxOutput = 140;
 #define PWM 10
 
 #define ADC_GPIO 4
+
+#define BATTERY_GPIO 1
+#define BATTERY_EN_GPIO 18
 
 // PWM初始频率
 const int F_B = 100;
@@ -253,6 +262,7 @@ void get_adc(void *arg)
     {
         // 检测是否达到目标值附近
         V = adc1_get_raw(ADC_GPIO) * ADC_B;
+        target_v = (float)voltage_property.value.int_value;
         int num = 0;
         if ((float)V > (float)target_v)
         {
@@ -313,37 +323,6 @@ void get_adc(void *arg)
     }
 }
 
-// pwm频率不断改变
-void pwm_output(void *arg)
-{
-    while (1)
-    {
-        // if (F >= F_B && target_flag == 0)
-        // {
-        //     // 这里获取到被控对象的反馈值
-        //     float feedbackValue = V;
-        //     float targetValue = target_v;                 // 这里获取到目标值
-        //     PID_Calc(&mypid, targetValue, feedbackValue); // 进行PID计算，结果在output成员变量中
-        //     float output = 0;
-        //     if (fabs(V - target_v) > 20)
-        //     {
-        //         output = 2.5 * mypid.output;
-        //     }
-        //     else
-        //     {
-        //         output = mypid.output;
-        //     }
-
-        //     if (F + output >= F_B)
-        //     {
-        //         F = F + output;
-        //         ledc_set_freq(ledc_channel.speed_mode, ledc_channel.channel, F);
-        //     }
-        // }
-        delay_ms(20);
-    }
-}
-
 int flag = 0;
 
 // 日志打印的标志位
@@ -353,7 +332,7 @@ void printf_flag(void *arg)
     {
         flag = 1;
         printf("F:%d,V:%f,TV:%d\n", F, V, target_v);
-        delay_ms(100);
+        delay_ms(1000);
     }
 }
 
@@ -381,10 +360,63 @@ void five_change(void *arg)
     }
 }
 
+const static int Battery_Level_Percent_Table[11] = {3000, 3650, 3700, 3740, 3760, 3795, 3840, 3910, 3980, 4070, 4200};
+
+/*
+ * @description: 电压值到电池百分比转换函数
+ * @param {int} voltage 电压值，单位mV
+ * @return {*} 电压百分比
+ */
+#define ARRAY_DIM(a) (sizeof(a) / sizeof((a)[0]))
+static int toPercentage(int voltage)
+{
+    int i = 0;
+    if (voltage < Battery_Level_Percent_Table[0])
+    {
+        return 0;
+    }
+
+    for (i = 0; i < ARRAY_DIM(Battery_Level_Percent_Table); i++)
+    {
+        if (voltage < Battery_Level_Percent_Table[i])
+        {
+            return i * 10 - (10UL * (int)(Battery_Level_Percent_Table[i] - voltage)) / (int)(Battery_Level_Percent_Table[i] - Battery_Level_Percent_Table[i - 1]);
+        }
+    }
+
+    return 100;
+}
+void battery_task(void *arg)
+{
+    gpio_reset_pin(BATTERY_EN_GPIO);
+    gpio_set_direction(BATTERY_EN_GPIO, GPIO_MODE_OUTPUT);
+    adc1_config_channel_atten(BATTERY_GPIO, ADC_ATTEN_DB_11);
+    while (1)
+    {
+        delay_ms(30000);
+        gpio_set_level(BATTERY_EN_GPIO, 1);
+        // adc1_config_channel_atten(BATTERY_GPIO, ADC_ATTEN_DB_11);
+        delay_ms(1);
+        int battery_voltage = adc1_get_raw(BATTERY_GPIO);
+        // adc1_config_channel_atten(ADC_GPIO, ADC_ATTEN_DB_11);
+        // int battery_voltage = adc1_get_raw(ADC_GPIO);
+        ESP_LOGI(TAG, "raw_voltage: %d", battery_voltage);
+        battery_voltage = (int)battery_voltage *2.84;
+        ESP_LOGI(TAG, "battery_voltage: %d", battery_voltage);
+        battery_property.value.int_value = toPercentage(battery_voltage);
+        // gpio_set_level(BATTERY_EN_GPIO, 0);
+        ESP_LOGI(TAG, "battery: %d", battery_property.value.int_value);
+    }
+}
+
 void beat_task(void *arg)
 {
     while (1)
     {
+        delay_ms((delay_property.value.int_value));
+        if(shock_property.value.int_value == 0){
+            continue;
+        }
         if (first_flag == 0)
         {
             gpio_set_level(O1, 1);
@@ -404,7 +436,7 @@ void beat_task(void *arg)
             gpio_set_level(O2, 0);
             first_flag = 0;
         }
-        delay_ms((10));
+        
     }
 }
 
@@ -418,7 +450,7 @@ void on_device_init(void)
     strcpy(voltage_property.name, "voltage");
     voltage_property.value_type = PROPERTY_TYPE_INT;
     voltage_property.value.int_value = 0;
-    voltage_property.max = 500;
+    voltage_property.max = 1000;
     voltage_property.min = 0;
 
     // init delay_property, it is a int between 100 and 1000
@@ -426,34 +458,17 @@ void on_device_init(void)
     delay_property.writeable = true;
     strcpy(delay_property.name, "delay");
     delay_property.value_type = PROPERTY_TYPE_INT;
-    delay_property.value.int_value = 150;
+    delay_property.value.int_value = 20;
     delay_property.max = 1000;
-    delay_property.min = 100;
+    delay_property.min = 10;
 
     shock_property.readable = true;
     shock_property.writeable = true;
     strcpy(shock_property.name, "shock");
     shock_property.value_type = PROPERTY_TYPE_INT;
-    shock_property.value.int_value = 1;
+    shock_property.value.int_value = 0;
     shock_property.max = 1;
     shock_property.min = 0;
-
-    init_gpio();
-    init_uart();
-    init_adc();
-    // 初始化PWM
-    init_pwm();
-
-    PID_Init(&mypid, kp, ki, kd, maxIntegral, maxOutput); // 初始化PID参数
-    // ADC采集
-    xTaskCreate(get_adc, "get_adc", 1024, NULL, 10, NULL);
-
-    xTaskCreate(pwm_output, "pwm_output", 1024, NULL, 10, NULL);
-
-    xTaskCreate(printf_flag, "printf_flag", 10240, NULL, 10, NULL);
-
-    xTaskCreate(five_change, "five_change", 1024, NULL, 10, NULL);
-    xTaskCreate(beat_task, "beat_task", 1024, NULL, 10, NULL);
 
     while (1)
     {
@@ -464,4 +479,19 @@ void on_device_init(void)
 void on_device_first_ready(void)
 {
     ESP_LOGI(TAG, "device_first_ready");
+    init_gpio();
+    init_uart();
+    init_adc();
+    // 初始化PWM
+    init_pwm();
+
+    PID_Init(&mypid, kp, ki, kd, maxIntegral, maxOutput); // 初始化PID参数
+        // ADC采集
+    xTaskCreate(get_adc, "get_adc", 1024, NULL, 10, NULL);
+
+    xTaskCreate(printf_flag, "printf_flag", 10240, NULL, 10, NULL); 
+
+    // xTaskCreate(five_change, "five_change", 1024, NULL, 10, NULL);
+    xTaskCreate(beat_task, "beat_task", 1024, NULL, 10, NULL);
+    xTaskCreate(battery_task, "battery_task", 2048, NULL, 10, NULL);
 }

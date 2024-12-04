@@ -15,7 +15,7 @@ static void adc_calibration_deinit(adc_cali_handle_t handle);
 static esp_err_t battery_adc_init(void);
 static int toPercentage(int voltage);
 
-#define BATTERY_CLOSE_EN 1
+
 
 /*
  * @description:
