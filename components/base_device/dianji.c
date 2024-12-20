@@ -27,7 +27,7 @@
 #include "driver/gpio.h"
 #define USER_ADC1_CHAN ADC_CHANNEL_4
 
-#define OUTPUT_TIME 100
+#define OUTPUT_TIME 50
 
 static const char *TAG = "dianji";
 
