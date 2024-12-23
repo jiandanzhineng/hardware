@@ -13,15 +13,13 @@
 #include "freertos/queue.h"
 
 #include "esp_system.h"
-#include "esp_wifi.h"
 #include "esp_event.h"
 #include "esp_log.h"
-#include "esp_netif.h"
 #include "esp_adc_cal.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 
 #include "mqtt_client.h"
-#include "nvs_flash.h"
 
 #include "lwip/err.h"
 #include "lwip/sys.h"
@@ -34,6 +32,33 @@
 #include "driver/ledc.h"
 #include "driver/adc.h"
 
+#include "cJSON.h"
+
+#include "base_device.h"
+#include "dianji.h"
+#include "device_common.h"
+
+
+static const char *TAG = "dianji";
+
+
+device_property_t voltage_property;
+device_property_t delay_property;
+device_property_t shock_property;
+extern device_property_t device_type_property;
+extern device_property_t sleep_time_property;
+extern device_property_t battery_property;
+
+device_property_t *device_properties[] = {
+    &device_type_property,
+    &sleep_time_property,
+    &voltage_property,
+    &battery_property,
+    &delay_property,
+    &shock_property,
+};
+
+int device_properties_num = sizeof(device_properties) / sizeof(device_properties[0]);
 
 
 // 板载LED指示灯引脚
@@ -68,48 +93,31 @@ float BOOST_ADC_K = 0.026;
 // 电池电压ADC校准系数
 float BAT_ADC_K = 363.2;
 
-// 连接wifi的配置
-// wifi名称、密码
-#define CONFIG_ESP_WIFI_SSID "test1234"
-#define CONFIG_ESP_WIFI_PASSWORD "test1234"
-
-// 电池判定为没电和满电的阈值
-float bat_small = 3.7;
-float bat_max = 4.2;
-
 // PID 参数
-float pid_Kp = 0.5f;
-float pid_Ki = 0.03f;
+float pid_Kp = 2.0f;
+float pid_Ki = 0.05f;
 float pid_Kd = 8.0f;
 float pid_dead_zone = 2.0f;
-float pid_max_integral = 10.0f;
-float pid_min_integral = -10.0f;
-float pid_max_output = 20.0f;
-float pid_min_output = -20.0f;
+float pid_max_integral = 25.0f;
+float pid_min_integral = -25.0f;
+float pid_max_output = 50.0f;
+float pid_min_output = -50.0f;
 
 
-// 连接MQTT的配置
-#define MQTT_URI "mqtt://emqx@192.168.137.1:1883"
-#define MQTT_USERNAME ""
-#define MQTT_PASSWORD ""
-#define MQTT_CLIENTID "test_wifi_mqtt"
-#define MQTT_TOPIC "/all"
-
-
-void init_wifi();
 void mqtt_rec_callback(const char *json_str);
 void init_gpio();
 void init_uart();
 void init_pwm();
 void init_adc();
-void init_wifi();
-void init_mqtt();
 void init_pid();
+void init_timer();
 void printf_log(void *arg);
 void get_bat_adc(void *arg);
 void pwm_output(void *arg);
 void output(void *arg);
 void mqtt_update(void *arg);
+void init_property();
+
 
 // 硬件初始化
 void on_device_init()
@@ -118,9 +126,9 @@ void on_device_init()
     init_uart();
     init_pwm();
     init_adc();
-    init_wifi();
-    init_mqtt();
     init_pid();
+    init_timer();
+	init_property();
 }
 
 // 创建任务
@@ -133,16 +141,14 @@ void on_device_first_ready()
     xTaskCreate(mqtt_update, "mqtt_update", 4096, NULL, 2, NULL);
 }
 
-
-// 主逻辑
-void app_main(void)
+void on_set_property(char *property_name, cJSON *property_value, int msg_id)
 {
-    on_device_init();
-    on_device_first_ready();
-    while (1)
-    {
-        vTaskDelay(pdMS_TO_TICKS(1000));
-    }
+
+}
+
+void on_action(cJSON *root)
+{
+
 }
 
 // 目标电压
@@ -159,107 +165,6 @@ int32_t v_delay = 30;
 
 // 是否放电
 uint8_t v_open_close_flag = 0;
-
-// 失败之后的重连次数
-#define EXAMPLE_ESP_MAXIMUM_RETRY  5
-
-#define CONFIG_ESP_WIFI_PW_ID ""
-
-#define ESP_WIFI_SAE_MODE WPA3_SAE_PWE_BOTH
-#define EXAMPLE_H2E_IDENTIFIER CONFIG_ESP_WIFI_PW_ID
-#define ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD WIFI_AUTH_WPA2_PSK
-
-#define EXAMPLE_ESP_WIFI_SSID      CONFIG_ESP_WIFI_SSID
-#define EXAMPLE_ESP_WIFI_PASS      CONFIG_ESP_WIFI_PASSWORD
-
-static EventGroupHandle_t s_wifi_event_group;
-
-#define WIFI_CONNECTED_BIT BIT0
-#define WIFI_FAIL_BIT      BIT1
-
-static const char *TAG = "wifi and mqtt:";
-
-static int s_retry_num = 0;
-
-static void event_handler(void* arg, esp_event_base_t event_base,
-                                int32_t event_id, void* event_data)
-{
-    if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
-        esp_wifi_connect();
-    } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
-        if (s_retry_num < EXAMPLE_ESP_MAXIMUM_RETRY) {
-            esp_wifi_connect();
-            s_retry_num++;
-            ESP_LOGI(TAG, "retry to connect to the AP");
-        } else {
-            xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
-        }
-        ESP_LOGI(TAG,"connect to the AP fail");
-    } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
-        ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
-        ESP_LOGI(TAG, "got ip:" IPSTR, IP2STR(&event->ip_info.ip));
-        s_retry_num = 0;
-        xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
-    }
-}
-
-
-// wifi sta模式
-void wifi_init_sta(void)
-{
-    s_wifi_event_group = xEventGroupCreate();
-
-    ESP_ERROR_CHECK(esp_netif_init());
-
-    ESP_ERROR_CHECK(esp_event_loop_create_default());
-    esp_netif_create_default_wifi_sta();
-
-    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
-
-    esp_event_handler_instance_t instance_any_id;
-    esp_event_handler_instance_t instance_got_ip;
-    ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
-                                                        ESP_EVENT_ANY_ID,
-                                                        &event_handler,
-                                                        NULL,
-                                                        &instance_any_id));
-    ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT,
-                                                        IP_EVENT_STA_GOT_IP,
-                                                        &event_handler,
-                                                        NULL,
-                                                        &instance_got_ip));
-
-    wifi_config_t wifi_config = {
-        .sta = {
-            .ssid = EXAMPLE_ESP_WIFI_SSID,
-            .password = EXAMPLE_ESP_WIFI_PASS,
-            .threshold.authmode = ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD,
-            .sae_pwe_h2e = ESP_WIFI_SAE_MODE,
-            .sae_h2e_identifier = EXAMPLE_H2E_IDENTIFIER,
-        },
-    };
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA) );
-    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config) );
-    ESP_ERROR_CHECK(esp_wifi_start() );
-
-    ESP_LOGI(TAG, "wifi_init_sta finished.");
-
-    EventBits_t bits = xEventGroupWaitBits(s_wifi_event_group,
-            WIFI_CONNECTED_BIT | WIFI_FAIL_BIT,
-            pdFALSE,
-            pdFALSE,
-            portMAX_DELAY);
-    if (bits & WIFI_CONNECTED_BIT) {
-        ESP_LOGI(TAG, "connected to ap SSID:%s password:%s",
-                 EXAMPLE_ESP_WIFI_SSID, EXAMPLE_ESP_WIFI_PASS);
-    } else if (bits & WIFI_FAIL_BIT) {
-        ESP_LOGI(TAG, "Failed to connect to SSID:%s, password:%s",
-                 EXAMPLE_ESP_WIFI_SSID, EXAMPLE_ESP_WIFI_PASS);
-    } else {
-        ESP_LOGE(TAG, "UNEXPECTED EVENT");
-    }
-}
 
 
 // json数据解析
@@ -281,6 +186,36 @@ void trim_spaces(char* str) {
     *(end + 1) = '\0';
 }
 
+
+void init_property()
+{
+	ESP_LOGI(TAG, "device_init");
+    // init power_property, it is a int between 0 and 500
+    voltage_property.readable = true;
+    voltage_property.writeable = true;
+    strcpy(voltage_property.name, "voltage");
+    voltage_property.value_type = PROPERTY_TYPE_INT;
+    voltage_property.value.int_value = 0;
+    voltage_property.max = 100;
+    voltage_property.min = 0;
+
+    // init delay_property, it is a int between 100 and 1000
+    delay_property.readable = true;
+    delay_property.writeable = true;
+    strcpy(delay_property.name, "delay");
+    delay_property.value_type = PROPERTY_TYPE_INT;
+    delay_property.value.int_value = 0;
+    delay_property.max = 1000;
+    delay_property.min = 0;
+
+    shock_property.readable = true;
+    shock_property.writeable = true;
+    strcpy(shock_property.name, "shock");
+    shock_property.value_type = PROPERTY_TYPE_INT;
+    shock_property.value.int_value = 0;
+    shock_property.max = 1;
+    shock_property.min = 0;
+}
 
 // 函数: 解析 JSON 并提取字段值
 int parse_json(const char* json_str, const char* key, char* value, int* is_number) {
@@ -337,94 +272,23 @@ int parse_json(const char* json_str, const char* key, char* value, int* is_numbe
 }
 
 
-// mqtt连接错误
-static void log_error_if_nonzero(const char *message, int error_code)
+void on_mqtt_msg_process(char *topic, cJSON *root)
 {
-    if (error_code != 0) {
-        ESP_LOGE(TAG, "Last error %s: 0x%x", message, error_code);
-        // 重连wifi
-        init_wifi();
+    // 将 cJSON 对象转换为字符串
+    char *json_str = cJSON_PrintUnformatted(root);  // 或者使用 cJSON_Print(root) 如果需要格式化输出
+
+    if (json_str != NULL) {
+        // 调用 mqtt_rec_callback 函数，传入 JSON 字符串
+        mqtt_rec_callback(json_str);
+
+        // 记得在不再需要 json_str 时释放内存
+        cJSON_free(json_str);
+    } else {
+        // 处理转换失败的情况
+        printf("Error: cJSON_PrintUnformatted failed\n");
     }
 }
 
-
-// mqtt处理事件
-static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
-{
-    ESP_LOGD(TAG, "Event dispatched from event loop base=%s, event_id=%" PRIi32 "", base, event_id);
-    esp_mqtt_event_handle_t event = event_data;
-    esp_mqtt_client_handle_t client = event->client;
-    int msg_id;
-    switch ((esp_mqtt_event_id_t)event_id) {
-    case MQTT_EVENT_CONNECTED:
-        ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
-        // msg_id = esp_mqtt_client_publish(client, "/topic/qos1", "data_3", 0, 1, 0);
-        // ESP_LOGI(TAG, "sent publish successful, msg_id=%d", msg_id);
-
-        msg_id = esp_mqtt_client_subscribe(client, MQTT_TOPIC, 0);
-        ESP_LOGI(TAG, "sent subscribe successful, msg_id=%d", msg_id);
-
-        // msg_id = esp_mqtt_client_subscribe(client, "/topic/qos1", 1);
-        // ESP_LOGI(TAG, "sent subscribe successful, msg_id=%d", msg_id);
-
-        // msg_id = esp_mqtt_client_unsubscribe(client, "/topic/qos1");
-        // ESP_LOGI(TAG, "sent unsubscribe successful, msg_id=%d", msg_id);
-        break;
-    case MQTT_EVENT_DISCONNECTED:
-        ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
-        break;
-
-    case MQTT_EVENT_SUBSCRIBED:
-        // ESP_LOGI(TAG, "MQTT_EVENT_SUBSCRIBED, msg_id=%d", event->msg_id);
-        // msg_id = esp_mqtt_client_publish(client, MQTT_TOPIC, "test_wifi_mqtt connected", 0, 0, 0);
-        // ESP_LOGI(TAG, "sent publish successful, msg_id=%d", msg_id);
-        break;
-    case MQTT_EVENT_UNSUBSCRIBED:
-        ESP_LOGI(TAG, "MQTT_EVENT_UNSUBSCRIBED, msg_id=%d", event->msg_id);
-        break;
-    case MQTT_EVENT_PUBLISHED:
-        ESP_LOGI(TAG, "MQTT_EVENT_PUBLISHED, msg_id=%d", event->msg_id);
-        break;
-    case MQTT_EVENT_DATA:
-        ESP_LOGI(TAG, "MQTT_EVENT_DATA");
-        printf("TOPIC=%.*s\r\n", event->topic_len, event->topic);
-        printf("DATA=%.*s\r\n", event->data_len, event->data);
-        if (strncmp(event->topic,MQTT_TOPIC, event->topic_len)==0)
-        {
-            mqtt_rec_callback(event->data);
-        }
-        break;
-    case MQTT_EVENT_ERROR:
-        ESP_LOGI(TAG, "MQTT_EVENT_ERROR");
-        if (event->error_handle->error_type == MQTT_ERROR_TYPE_TCP_TRANSPORT) {
-            log_error_if_nonzero("reported from esp-tls", event->error_handle->esp_tls_last_esp_err);
-            log_error_if_nonzero("reported from tls stack", event->error_handle->esp_tls_stack_err);
-            log_error_if_nonzero("captured as transport's socket errno",  event->error_handle->esp_transport_sock_errno);
-            ESP_LOGI(TAG, "Last errno string (%s)", strerror(event->error_handle->esp_transport_sock_errno));
-
-        }
-        break;
-    default:
-        ESP_LOGI(TAG, "Other event id:%d", event->event_id);
-        break;
-    }
-}
-
-// mqtt 连接
-esp_mqtt_client_handle_t client;
-static void mqtt_app_start(void)
-{
-    esp_mqtt_client_config_t mqtt_cfg = {
-        .broker.address.uri = MQTT_URI,
-        .credentials.username = MQTT_USERNAME,
-        .credentials.client_id = MQTT_CLIENTID,
-        .credentials.authentication.password = MQTT_PASSWORD
-    };
-
-    client = esp_mqtt_client_init(&mqtt_cfg);
-    esp_mqtt_client_register_event(client, ESP_EVENT_ANY_ID, mqtt_event_handler, NULL);
-    esp_mqtt_client_start(client);
-}
 
 // PID控制
 typedef struct
@@ -635,38 +499,6 @@ void mqtt_rec_callback(const char* json_str)
 }
 
 
-// wifi连接初始化
-void init_wifi()
-{
-     //Initialize NVS
-    esp_err_t ret = nvs_flash_init();
-    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-      ESP_ERROR_CHECK(nvs_flash_erase());
-      ret = nvs_flash_init();
-    }
-    ESP_ERROR_CHECK(ret);
-
-    ESP_LOGI(TAG, "ESP_WIFI_MODE_STA");
-    wifi_init_sta();
-}
-
-// mqtt连接
-void init_mqtt()
-{
-    ESP_LOGI(TAG, "[APP] Startup..");
-    ESP_LOGI(TAG, "[APP] Free memory: %d bytes", (int)esp_get_free_heap_size());
-    ESP_LOGI(TAG, "[APP] IDF version: %s", esp_get_idf_version());
-
-    esp_log_level_set("*", ESP_LOG_INFO);
-    esp_log_level_set("mqtt_client", ESP_LOG_VERBOSE);
-    esp_log_level_set("MQTT_EXAMPLE", ESP_LOG_VERBOSE);
-    esp_log_level_set("TRANSPORT_BASE", ESP_LOG_VERBOSE);
-    esp_log_level_set("esp-tls", ESP_LOG_VERBOSE);
-    esp_log_level_set("TRANSPORT", ESP_LOG_VERBOSE);
-    esp_log_level_set("outbox", ESP_LOG_VERBOSE);
-
-    mqtt_app_start();
-}
 
 
 // GPIO初始化
@@ -711,6 +543,7 @@ void init_uart()
     uart_param_config(UART_NUM_0, &uart_config);
 }
 
+
 // ADC初始化
 void init_adc(void)
 {
@@ -731,6 +564,24 @@ void get_adc(void *arg)
 }
 
 
+// 函数：根据电压值返回对应的百分比
+int get_battery_percentage(float bat_v) {
+    if (bat_v >= 4.20) return 100;
+    if (bat_v >= 4.06) return 90;
+    if (bat_v >= 3.98) return 80;
+    if (bat_v >= 3.92) return 70;
+    if (bat_v >= 3.87) return 60;
+    if (bat_v >= 3.82) return 50;
+    if (bat_v >= 3.79) return 40;
+    if (bat_v >= 3.77) return 30;
+    if (bat_v >= 3.74) return 20;
+    if (bat_v >= 3.68) return 10;
+    if (bat_v >= 3.45) return 5;
+    if (bat_v >= 3.00) return 0;
+    
+    return 0;  // 电压低于3.00V时，返回0%
+}
+
 uint8_t bat_value = 0;
 // 获取当前电池百分比
 void get_bat_adc(void *arg)
@@ -738,17 +589,8 @@ void get_bat_adc(void *arg)
     while (1)
     {
         float bat_v = ((float)(adc1_get_raw(BAT_ADC)))/BAT_ADC_K;
-        if (bat_v<=bat_small)
-        {
-            bat_value = 1;
-        }
-        else if (bat_v>=bat_max)
-        {
-            bat_value = 100;
-        }
-        else{
-            bat_value = (bat_v-bat_small)/(bat_max-bat_small);
-        }
+        bat_value = get_battery_percentage(bat_v);
+		battery_property.value.int_value = bat_value;
         vTaskDelay(pdMS_TO_TICKS(5000));
     }
 }
@@ -765,10 +607,10 @@ void pwm_output(void *arg)
             // 如果误差在死区范围内，则不做控制输出
             if (fabs(error) > pid.dead_zone)
             {
-                if (pwm_f >= 100 && pwm_f<=15000)
+                if (pwm_f >= 100 && pwm_f<=20000)
                 {
                     int32_t pid_output = pwm_f + PID_Compute(&pid, target_v, now_v);
-                    if (pid_output >= 100 && pid_output<=15000)
+                    if (pid_output >= 100 && pid_output<=20000)
                     {
                         pwm_f = pid_output;
                         ledc_set_freq(ledc_channel.speed_mode, ledc_channel.channel, pwm_f);
@@ -781,14 +623,36 @@ void pwm_output(void *arg)
 }
 
 
-static __inline void output_delay()
+
+
+// 创建定时器
+esp_timer_handle_t timer;
+// 定时器回调函数
+void timer_callback(void* arg)
 {
-    int ts = 25000;
-    while (ts--)
-    {
-        __asm__ __volatile__ ("nop");
-    } 
+    gpio_set_level(O1, 0);
+    gpio_set_level(O2, 0);
+    esp_timer_stop(timer);
 }
+
+void init_timer()
+{
+    // 创建一个esp_timer_create_args_t结构体，设置定时器参数
+    esp_timer_create_args_t timer_args = {
+        .callback = timer_callback,                 // 设置回调函数
+        .name = "my_timer",                          // 设置定时器名称
+        .dispatch_method = ESP_TIMER_TASK,           // 从任务中调用回调函数
+        .skip_unhandled_events = false               // 不跳过未处理的事件
+    };
+
+    
+    esp_timer_create(&timer_args, &timer);
+
+    // 启动定时器，每毫秒触发一次
+    // 1000微秒
+    // esp_timer_start_periodic(timer, 1000); 
+}
+
 
 // 放电
 void output(void *arg)
@@ -800,21 +664,18 @@ void output(void *arg)
         {
             if (first_flag == 0)
             {
+                // 放电
                 gpio_set_level(O1, 0);
                 gpio_set_level(O2, 1);
-                // 放电
-                output_delay();
-                gpio_set_level(O1, 0);
-                gpio_set_level(O2, 0);
+                // 放电1ms
+                esp_timer_start_periodic(timer, 2000); 
                 first_flag = 1;
             }
             else
             {
                 gpio_set_level(O1, 1);
                 gpio_set_level(O2, 0);
-                output_delay();
-                gpio_set_level(O1, 0);
-                gpio_set_level(O2, 0);
+                esp_timer_start_periodic(timer, 2000); 
                 first_flag = 0;
             }
         }
@@ -853,7 +714,7 @@ void generate_json(char *json_str, int voltage, int delay, int shock, int batter
 	        voltage, delay, shock, battery);
 }
 
-
+extern char publish_topic[32];
 // 每一定时间上传数据
 void mqtt_update(void *arg)
 {
@@ -864,9 +725,19 @@ void mqtt_update(void *arg)
 	    generate_json(json_str, target_v,v_delay , v_open_close_flag, bat_value);
 
         // 打印生成的 JSON 字符串
-        printf("%s\n", json_str);
+        printf("publish topic is%s\n", publish_topic);
+        printf("publish data is%s\n", json_str);
 
-        esp_mqtt_client_publish(client, MQTT_TOPIC, json_str, 0, 0, 0);
+        voltage_property.value.int_value = target_v;
+        battery_property.value.int_value = bat_value;
+        delay_property.value.int_value = v_delay;
+        shock_property.value.int_value = v_open_close_flag;
+
+        // esp_mqtt_client_publish(smqtt_client, publish_topic, json_str, 0, 1, 0);
         vTaskDelay(pdMS_TO_TICKS(V_UPDATE_TIME * 1000));
     }
 }
+
+
+
+
