@@ -87,6 +87,21 @@ int device_properties_num = sizeof(device_properties) / sizeof(device_properties
 // 每60s 上传mqtt数据
 #define V_UPDATE_TIME 60
 
+// PWM结构体
+ledc_timer_config_t ledc_timer = {
+    .speed_mode = LEDC_LOW_SPEED_MODE,
+    .duty_resolution = 8,
+    .timer_num = LEDC_TIMER_0,
+    .freq_hz = 100};
+
+ledc_channel_config_t ledc_channel = {
+    .channel = LEDC_CHANNEL_0,
+    .speed_mode = LEDC_LOW_SPEED_MODE,
+    .gpio_num = BOOST_PWM,
+    .timer_sel = LEDC_TIMER_0,
+    .hpoint = 0,
+    .duty = 192};
+
 // 升压ADC校准系数
 float BOOST_ADC_K = 0.026;
 
@@ -102,6 +117,21 @@ float pid_max_integral = 25.0f;
 float pid_min_integral = -25.0f;
 float pid_max_output = 50.0f;
 float pid_min_output = -50.0f;
+
+// 目标电压
+float target_v = 0;
+
+// PWM频率
+int32_t pwm_f = 100;
+
+// 当前实际电压
+float now_v = 0;
+
+// 放电的时间间隔(多少毫秒放一下电)
+int32_t v_delay = 30;
+
+// 是否放电
+uint8_t v_open_close_flag = 0;
 
 
 void mqtt_rec_callback(const char *json_str);
@@ -138,33 +168,54 @@ void on_device_first_ready()
     xTaskCreate(get_bat_adc, "get_bat_adc", 4096, NULL, 2, NULL);
     xTaskCreate(pwm_output, "pwm_output", 4096, NULL, 2, NULL);
     xTaskCreate(output, "output", 4096, NULL, 2, NULL);
-    xTaskCreate(mqtt_update, "mqtt_update", 4096, NULL, 2, NULL);
+    //xTaskCreate(mqtt_update, "mqtt_update", 4096, NULL, 2, NULL);
 }
 
 void on_set_property(char *property_name, cJSON *property_value, int msg_id)
 {
-
+    //ESP_LOGI(TAG, "on_set_property property_name:%s", property_name);
+    // if(strcmp(property_name, "power1") == 0){
+    //     control_ledc(LEDC_CHANNEL_0, power1_property.value.int_value);
+    // }else if(strcmp(property_name, "power2") == 0){
+    //     control_ledc(LEDC_CHANNEL_1, power2_property.value.int_value);    
+    // }
+    if(strcmp(property_name, "voltage") == 0){
+        target_v = voltage_property.value.int_value;
+    }
+    else if(strcmp(property_name, "delay") == 0){
+        v_delay = delay_property.value.int_value;
+    }
+    else if(strcmp(property_name, "shock") == 0){
+        v_open_close_flag = shock_property.value.int_value;
+        if (v_open_close_flag==0)
+        {
+            ledc_stop(ledc_channel.speed_mode, ledc_channel.channel, 0);
+        }
+        else
+        {
+            init_pwm();
+        }
+    }
 }
 
 void on_action(cJSON *root)
 {
-
+    char *method = cJSON_GetObjectItem(root, "method")->valuestring;
+    if (strcmp(method, "dian") == 0)
+    {
+        int time = cJSON_GetObjectItem(root, "time")->valueint;
+        int voltage = cJSON_GetObjectItem(root, "voltage")->valueint;
+        voltage_property.value.int_value = voltage;
+        shock_property.value.int_value = 1;
+        ESP_LOGI(TAG, "dian time: %d, voltage: %d", time, voltage);
+        vTaskDelay(time / portTICK_PERIOD_MS);
+        shock_property.value.int_value = 0;
+        // control_ledc(LEDC_CHANNEL, (uint32_t)0);
+        ESP_LOGI(TAG, "dian end");
+    }
 }
 
-// 目标电压
-float target_v = 0;
 
-// PWM频率
-int32_t pwm_f = 100;
-
-// 当前实际电压
-float now_v = 0;
-
-// 放电的时间间隔(多少毫秒放一下电)
-int32_t v_delay = 30;
-
-// 是否放电
-uint8_t v_open_close_flag = 0;
 
 
 // json数据解析
@@ -279,7 +330,7 @@ void on_mqtt_msg_process(char *topic, cJSON *root)
 
     if (json_str != NULL) {
         // 调用 mqtt_rec_callback 函数，传入 JSON 字符串
-        mqtt_rec_callback(json_str);
+        //mqtt_rec_callback(json_str);
 
         // 记得在不再需要 json_str 时释放内存
         cJSON_free(json_str);
@@ -360,20 +411,7 @@ float PID_Compute(PIDController *pid, float setpoint, float measured_value) {
 }
 
 
-// PWM结构体
-ledc_timer_config_t ledc_timer = {
-    .speed_mode = LEDC_LOW_SPEED_MODE,
-    .duty_resolution = 8,
-    .timer_num = LEDC_TIMER_0,
-    .freq_hz = 100};
 
-ledc_channel_config_t ledc_channel = {
-    .channel = LEDC_CHANNEL_0,
-    .speed_mode = LEDC_LOW_SPEED_MODE,
-    .gpio_num = BOOST_PWM,
-    .timer_sel = LEDC_TIMER_0,
-    .hpoint = 0,
-    .duty = 192};
 
 
 // PWM初始化
@@ -591,7 +629,7 @@ void get_bat_adc(void *arg)
         float bat_v = ((float)(adc1_get_raw(BAT_ADC)))/BAT_ADC_K;
         bat_value = get_battery_percentage(bat_v);
 		battery_property.value.int_value = bat_value;
-        vTaskDelay(pdMS_TO_TICKS(5000));
+        vTaskDelay(pdMS_TO_TICKS(30000));
     }
 }
 
@@ -694,7 +732,7 @@ void printf_log(void *arg)
         printf("bat_v is %f\r\n",((float)(adc1_get_raw(BAT_ADC)))/(BAT_ADC_K));
         printf("pwm_f is %d\r\n",(int)pwm_f);
         printf("pid is %f %f %f\r\n",pid.Kp,pid.Ki,pid.Kd);
-        vTaskDelay(pdMS_TO_TICKS(1000));
+        vTaskDelay(pdMS_TO_TICKS(3000));
     }
 }
 

@@ -28,7 +28,7 @@ dependencies:
   idf:
     source:
       type: idf
-    version: 5.1.5
+    version: 5.2.3
 direct_dependencies:
 - espressif/button
 - idf
