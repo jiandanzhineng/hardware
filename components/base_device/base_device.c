@@ -111,7 +111,7 @@ void device_init(void)
     sleep_time_property.writeable = true;
     strcpy(sleep_time_property.name, "sleep_time");
     sleep_time_property.value_type = PROPERTY_TYPE_INT;
-    sleep_time_property.value.int_value = 3600;
+    sleep_time_property.value.int_value = 7200;
 
     battery_property.readable = true;
     battery_property.writeable = false;

@@ -133,6 +133,9 @@ int32_t v_delay = 30;
 // 是否放电
 uint8_t v_open_close_flag = 0;
 
+// 停止电击计时
+int32_t remain_time = 0;
+
 
 void mqtt_rec_callback(const char *json_str);
 void init_gpio();
@@ -147,6 +150,7 @@ void pwm_output(void *arg);
 void output(void *arg);
 void mqtt_update(void *arg);
 void init_property();
+void stop_shock_task();
 
 
 // 硬件初始化
@@ -169,6 +173,7 @@ void on_device_first_ready()
     xTaskCreate(pwm_output, "pwm_output", 4096, NULL, 2, NULL);
     xTaskCreate(output, "output", 4096, NULL, 2, NULL);
     //xTaskCreate(mqtt_update, "mqtt_update", 4096, NULL, 2, NULL);
+    xTaskCreate(stop_shock_task, "stop_shock_task", 4096, NULL, 2, NULL);
 }
 
 void on_set_property(char *property_name, cJSON *property_value, int msg_id)
@@ -179,23 +184,17 @@ void on_set_property(char *property_name, cJSON *property_value, int msg_id)
     // }else if(strcmp(property_name, "power2") == 0){
     //     control_ledc(LEDC_CHANNEL_1, power2_property.value.int_value);    
     // }
-    if(strcmp(property_name, "voltage") == 0){
-        target_v = voltage_property.value.int_value;
-    }
-    else if(strcmp(property_name, "delay") == 0){
-        v_delay = delay_property.value.int_value;
-    }
-    else if(strcmp(property_name, "shock") == 0){
-        v_open_close_flag = shock_property.value.int_value;
-        if (v_open_close_flag==0)
-        {
-            ledc_stop(ledc_channel.speed_mode, ledc_channel.channel, 0);
-        }
-        else
-        {
-            init_pwm();
-        }
-    }
+    // if(strcmp(property_name, "shock") == 0){
+    //     v_open_close_flag = shock_property.value.int_value;
+    //     // if (v_open_close_flag==0)
+    //     // {
+    //     //     ledc_stop(ledc_channel.speed_mode, ledc_channel.channel, 0);
+    //     // }
+    //     // else
+    //     // {
+    //     //     init_pwm();
+    //     // }
+    // }
 }
 
 void on_action(cJSON *root)
@@ -208,11 +207,30 @@ void on_action(cJSON *root)
         voltage_property.value.int_value = voltage;
         shock_property.value.int_value = 1;
         ESP_LOGI(TAG, "dian time: %d, voltage: %d", time, voltage);
-        vTaskDelay(time / portTICK_PERIOD_MS);
-        shock_property.value.int_value = 0;
-        // control_ledc(LEDC_CHANNEL, (uint32_t)0);
-        ESP_LOGI(TAG, "dian end");
+        remain_time = time;
+        // vTaskDelay(time / portTICK_PERIOD_MS);
+        // shock_property.value.int_value = 0;
+        // // control_ledc(LEDC_CHANNEL, (uint32_t)0);
+        // ESP_LOGI(TAG, "dian end");
     }
+}
+
+void stop_shock_task()
+{
+    while (1)
+    {
+        vTaskDelay(100 / portTICK_PERIOD_MS);
+        if (remain_time > 100)
+        {
+            remain_time -= 100;
+        }
+        else if (remain_time > 0)
+        {
+            shock_property.value.int_value = 0;
+            remain_time = 0;
+        }
+    }
+    
 }
 
 
@@ -255,9 +273,9 @@ void init_property()
     delay_property.writeable = true;
     strcpy(delay_property.name, "delay");
     delay_property.value_type = PROPERTY_TYPE_INT;
-    delay_property.value.int_value = 0;
+    delay_property.value.int_value = 30;
     delay_property.max = 1000;
-    delay_property.min = 0;
+    delay_property.min = 20;
 
     shock_property.readable = true;
     shock_property.writeable = true;
@@ -639,8 +657,9 @@ void pwm_output(void *arg)
 {
     while (1)
     {
-        if (v_open_close_flag == 1)
+        if (shock_property.value.int_value == 1)
         {
+            target_v = voltage_property.value.int_value;
             float error = target_v - now_v;
             // 如果误差在死区范围内，则不做控制输出
             if (fabs(error) > pid.dead_zone)
@@ -698,7 +717,7 @@ void output(void *arg)
     uint8_t first_flag = 0;
     while (1)
     {
-        if (v_open_close_flag==1)
+        if (shock_property.value.int_value==1)
         {
             if (first_flag == 0)
             {
@@ -717,7 +736,7 @@ void output(void *arg)
                 first_flag = 0;
             }
         }
-        vTaskDelay(pdMS_TO_TICKS(v_delay));
+        vTaskDelay(pdMS_TO_TICKS(delay_property.value.int_value));
     }
 }
 
