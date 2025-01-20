@@ -398,6 +398,9 @@ void PID_Init(PIDController *pid, float Kp, float Ki, float Kd, float dead_zone,
 
 // PID 输出
 float PID_Compute(PIDController *pid, float setpoint, float measured_value) {
+    if(setpoint > 100){
+        setpoint = 100;
+    }
     // 当前误差
     float error = setpoint - measured_value;
     // 积分部分
@@ -657,23 +660,24 @@ void pwm_output(void *arg)
 {
     while (1)
     {
-        if (shock_property.value.int_value == 1)
+        target_v = voltage_property.value.int_value;
+        float error = target_v - now_v;
+        // 如果误差在死区范围内，则不做控制输出
+        if (fabs(error) > pid.dead_zone)
         {
-            target_v = voltage_property.value.int_value;
-            float error = target_v - now_v;
-            // 如果误差在死区范围内，则不做控制输出
-            if (fabs(error) > pid.dead_zone)
+            if (pwm_f >= 100 && pwm_f<=20000)
             {
-                if (pwm_f >= 100 && pwm_f<=20000)
+                int32_t pid_output = pwm_f + PID_Compute(&pid, target_v, now_v);
+                if (pid_output >= 100 && pid_output<=20000)
                 {
-                    int32_t pid_output = pwm_f + PID_Compute(&pid, target_v, now_v);
-                    if (pid_output >= 100 && pid_output<=20000)
-                    {
-                        pwm_f = pid_output;
-                        ledc_set_freq(ledc_channel.speed_mode, ledc_channel.channel, pwm_f);
-                    }
+                    pwm_f = pid_output;
+                    ledc_set_freq(ledc_channel.speed_mode, ledc_channel.channel, pwm_f);
                 }
             }
+        }
+        if (shock_property.value.int_value != 1)
+        {
+            vTaskDelay(pdMS_TO_TICKS(100));
         }
         vTaskDelay(pdMS_TO_TICKS(40));
     }
