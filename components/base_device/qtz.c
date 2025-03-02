@@ -9,8 +9,6 @@
 #include "driver/timer.h"
 #include "driver/gpio.h"
 #include "esp_log.h"
-#include "qtz.h"
-#include "single_device_common.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -62,6 +60,18 @@ int32_t inout_divider = 105;
 
 int in_state = 0; // 0 out 1 in
 float last_score = 0;
+
+
+void hcsr04_timer_init(void);
+void hcsr04_delay_us(uint16_t us);
+
+static void report_distance_task(void);
+static void check_distance_task(void);
+
+void nvs0_init(void);
+void nvs0_read(void);
+void nvs0_set(void);
+void update_in_state(void);
 
 void on_set_property(char *property_name, cJSON *property_value, int msg_id)
 {
@@ -165,7 +175,7 @@ static void gpio_task_example(void *arg)
             {                                                                                                // 131989 value for error
                 distance_property.value.float_value = 0.0425 * (timer_counter_update - timer_counter_value); // counter * 340000 / 4000000 / 2
                 average_length_mm = 0.93 * average_length_mm + 0.07 * distance_property.value.float_value;
-                // ESP_LOGE(HCSR04TAG, "length: %.2f mm average:%.2f mm", distance_property.value.float_value, average_length_mm);
+                ESP_LOGE(HCSR04TAG, "length: %.2f mm average:%.2f mm", distance_property.value.float_value, average_length_mm);
                 update_in_state();
             }
             else

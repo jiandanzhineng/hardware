@@ -8,9 +8,13 @@ if(CONFIG_DEVICE_TD01)
     list(APPEND srcs "TD01.c")
 endif()
 
+if(CONFIG_DEVICE_QTZ)
+    list(APPEND srcs "QTZ.c")
+endif()
+
 idf_component_register(SRCS "${srcs}"
                         INCLUDE_DIRS "include"
-                        REQUIRES "mqtt" "json" "button" "Battery")
+                        REQUIRES "mqtt" "json" "button" "Battery" "nvs_flash")
 
 
 
