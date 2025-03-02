@@ -29,7 +29,9 @@ static const char *HCSR04TAG = "HCSR04";
 
 device_property_t distance_property;
 device_property_t report_delay_ms_property;
-device_property_t inout_divider_property;
+// device_property_t inout_divider_property;
+device_property_t low_band_property;
+device_property_t high_band_property;
 extern device_property_t device_type_property;
 extern device_property_t sleep_time_property;
 device_property_t *device_properties[] = {
@@ -37,7 +39,9 @@ device_property_t *device_properties[] = {
     &distance_property,
     &report_delay_ms_property,
     &sleep_time_property,
-    &inout_divider_property,
+    // &inout_divider_property,
+    &low_band_property,
+    &high_band_property,
 };
 int device_properties_num = sizeof(device_properties) / sizeof(device_properties[0]);
 
@@ -57,9 +61,11 @@ int check_finish = 0;
 static QueueHandle_t gpio_evt_queue = NULL;
 
 int32_t inout_divider = 105;
+int32_t low_band = 60; // trigger event if distance is less than low_band
+int32_t high_band = 150;  // trigger event if distance is more than high_band
 
-int in_state = 0; // 0 out 1 in
-float last_score = 0;
+int low_state_flag = 0;
+int high_state_flag = 0;
 
 
 void hcsr04_timer_init(void);
@@ -76,9 +82,14 @@ void update_in_state(void);
 void on_set_property(char *property_name, cJSON *property_value, int msg_id)
 {
     ESP_LOGI(TAG, "on_set_property property_name:%s", property_name);
-    if (strcmp(property_name, "inout_divider") == 0)
+    if (strcmp(property_name, "low_band") == 0)
     {
-        inout_divider = property_value->valueint;
+        low_band = property_value->valueint;
+        nvs0_set();
+    }
+    else if (strcmp(property_name, "high_band") == 0)
+    {
+        high_band = property_value->valueint;
         nvs0_set();
     }
 }
@@ -118,7 +129,7 @@ static void check_distance_task(void)
         if (checking && !check_finish)
         {
             fail_num++;
-            if (fail_num > 20)
+            if (fail_num > 15)
             {
                 ESP_LOGE(HCSR04TAG, "check fail");
                 check_finish = 1;
@@ -175,7 +186,7 @@ static void gpio_task_example(void *arg)
             {                                                                                                // 131989 value for error
                 distance_property.value.float_value = 0.0425 * (timer_counter_update - timer_counter_value); // counter * 340000 / 4000000 / 2
                 average_length_mm = 0.93 * average_length_mm + 0.07 * distance_property.value.float_value;
-                ESP_LOGE(HCSR04TAG, "length: %.2f mm average:%.2f mm", distance_property.value.float_value, average_length_mm);
+                // ESP_LOGE(HCSR04TAG, "length: %.2f mm average:%.2f mm", distance_property.value.float_value, average_length_mm);
                 update_in_state();
             }
             else
@@ -191,30 +202,36 @@ static void gpio_task_example(void *arg)
 
 void update_in_state(void)
 {
-    if (inout_divider - average_length_mm > last_score)
-    {
-        last_score = inout_divider - average_length_mm;
-    }
-
-    if (in_state == 0)
-    { // out
-
-        if (average_length_mm < inout_divider - 10)
+    if(low_state_flag){
+        if (average_length_mm > low_band + 10)
         {
-            ESP_LOGI(TAG, "in_state change to %d average_length_mm=%.2f", 1-in_state, average_length_mm);
-            in_state = 1;
+            low_state_flag = 0;
+            ESP_LOGI(TAG, "low_state_flag change to %d average_length_mm=%.2f", low_state_flag, average_length_mm);
+        }
+    }else{
+        if (average_length_mm < low_band)
+        {
+            low_state_flag = 1;
+            ESP_LOGI(TAG, "low_state_flag change to %d average_length_mm=%.2f", low_state_flag, average_length_mm);
+                        cJSON *root = cJSON_CreateObject();
+            cJSON_AddStringToObject(root, "method", "low");
+            mqtt_publish(root);
         }
     }
-    else
-    { // in
-        if (average_length_mm > inout_divider + 10)
+
+    if(high_state_flag){
+        if (average_length_mm < high_band - 10)
         {
-            ESP_LOGI(TAG, "in_state change to %d average_length_mm=%.2f", 1-in_state, average_length_mm);
-            in_state = 0;
-            // publish
+            high_state_flag = 0;
+            ESP_LOGI(TAG, "high_state_flag change to %d average_length_mm=%.2f", high_state_flag, average_length_mm);
+        }
+    }else{
+        if (average_length_mm > high_band)
+        {
+            high_state_flag = 1;
+            ESP_LOGI(TAG, "high_state_flag change to %d average_length_mm=%.2f", high_state_flag, average_length_mm);
             cJSON *root = cJSON_CreateObject();
-            cJSON_AddStringToObject(root, "method", "finish");
-            cJSON_AddNumberToObject(root, "score", last_score);
+            cJSON_AddStringToObject(root, "method", "high");
             mqtt_publish(root);
         }
     }
@@ -254,11 +271,25 @@ void on_device_init(void)
     report_delay_ms_property.value.int_value = 10000;
 
     // init inout_divider, it is a int
-    inout_divider_property.readable = true;
-    inout_divider_property.writeable = true;
-    strcpy(inout_divider_property.name, "inout_divider");
-    inout_divider_property.value_type = PROPERTY_TYPE_INT;
-    inout_divider_property.value.int_value = inout_divider;
+    // inout_divider_property.readable = true;
+    // inout_divider_property.writeable = true;
+    // strcpy(inout_divider_property.name, "inout_divider");
+    // inout_divider_property.value_type = PROPERTY_TYPE_INT;
+    // inout_divider_property.value.int_value = inout_divider;
+
+    // init low_band, it is a int
+    low_band_property.readable = true;
+    low_band_property.writeable = true;
+    strcpy(low_band_property.name, "low_band");
+    low_band_property.value_type = PROPERTY_TYPE_INT;
+    low_band_property.value.int_value = low_band;
+
+    // init high_band, it is a int
+    high_band_property.readable = true;
+    high_band_property.writeable = true;
+    strcpy(high_band_property.name, "high_band");
+    high_band_property.value_type = PROPERTY_TYPE_INT;
+    high_band_property.value.int_value = high_band;
 
     // create gpio button
     button_config_t gpio_btn_cfg = {
@@ -313,7 +344,9 @@ void on_device_init(void)
 
     nvs0_init();
     nvs0_read();
-    inout_divider_property.value.int_value = inout_divider;
+    // inout_divider_property.value.int_value = inout_divider;
+    low_band_property.value.int_value = low_band;
+    high_band_property.value.int_value = high_band;
 }
 
 // set 80m hz /20 ,4m hz tick
@@ -378,12 +411,15 @@ void nvs0_read(void)
         printf("Done\n");
         // Read
         printf("Reading restart counter from NVS ... ");
-        err = nvs_get_i32(my_handle, "inout_diveder", &inout_divider);
+        // err = nvs_get_i32(my_handle, "inout_diveder", &inout_divider);
+        err = nvs_get_i32(my_handle, "low_band", &low_band);
+        err = nvs_get_i32(my_handle, "high_band", &high_band);
         switch (err)
         {
         case ESP_OK:
             printf("Done\n");
-            printf("get inout_diveder = %" PRIu32 "\n", inout_divider);
+            printf("get low_band = %" PRIu32 "\n", low_band);
+            printf("get high_band = %" PRIu32 "\n", high_band);
             break;
         case ESP_ERR_NVS_NOT_FOUND:
             printf("The value is not initialized yet!\n");
@@ -408,7 +444,9 @@ void nvs0_set(void)
         printf("Done\n");
         // Read
         printf("Write to NVS ... ");
-        err = nvs_set_i32(my_handle, "inout_diveder", inout_divider);
+        // err = nvs_set_i32(my_handle, "inout_diveder", inout_divider);
+        err = nvs_set_i32(my_handle, "low_band", low_band);
+        err = nvs_set_i32(my_handle, "high_band", high_band);
         printf((err != ESP_OK) ? "Failed!\n" : "Done\n");
         printf("Committing updates in NVS ... ");
         err = nvs_commit(my_handle);
