@@ -121,7 +121,7 @@ void control_ledc(ledc_channel_t channel, uint32_t duty)
     else{
         duty = duty * 9 + 5897;
     }
-    duty = 8191 - duty;
+    duty = duty;
     ESP_ERROR_CHECK(ledc_set_duty(LEDC_MODE, channel, duty));
     // Update duty to apply the new value
     ESP_ERROR_CHECK(ledc_update_duty(LEDC_MODE, channel));
@@ -161,6 +161,11 @@ void dimmable_plug_pwm_init(void)
         .hpoint         = 0
     };
     ESP_ERROR_CHECK(ledc_channel_config(&ledc_channel1));
-    control_ledc(LEDC_CHANNEL_0, 0);
-    control_ledc(LEDC_CHANNEL_1, 0);
+    // control_ledc(LEDC_CHANNEL_0, 0);
+    // control_ledc(LEDC_CHANNEL_1, 0);
+
+    ESP_ERROR_CHECK(ledc_set_duty(LEDC_MODE, LEDC_CHANNEL_0, 0));
+    ESP_ERROR_CHECK(ledc_update_duty(LEDC_MODE, LEDC_CHANNEL_0));
+    ESP_ERROR_CHECK(ledc_set_duty(LEDC_MODE, LEDC_CHANNEL_1, 0));
+    ESP_ERROR_CHECK(ledc_update_duty(LEDC_MODE, LEDC_CHANNEL_1));
 }
