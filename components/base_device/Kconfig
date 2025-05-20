@@ -25,7 +25,11 @@ menu "Device Selectionaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 			bool "QTZ"
 			help
 				help for option4
-	        	
+
+		config DEVICE_ZIDONGSUO
+			bool "ZIDONGSUO"
+			help
+				help for option5   	
 	endchoice
 
 endmenu

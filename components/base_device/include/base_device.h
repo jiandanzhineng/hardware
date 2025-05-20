@@ -29,6 +29,11 @@
     #define DEVICE_TYPE_NAME "QTZ"
 #endif
 
+#ifdef CONFIG_DEVICE_ZIDONGSUO
+    #define DEVICE_TYPE_INDEX DEVICE_ZIDONGSUO
+    #define DEVICE_TYPE_NAME "ZIDONGSUO"
+#endif
+
 
 #ifndef DEVICE_TYPE_INDEX  
     #error "Please select a device type in menuconfig."  

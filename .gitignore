@@ -1,6 +1,7 @@
 .vscode
 build
 *.zip
+managed_components
 
 sdkconfig
 sdkconfig.old

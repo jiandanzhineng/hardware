@@ -12,7 +12,13 @@ if(CONFIG_DEVICE_QTZ)
     list(APPEND srcs "QTZ.c")
 endif()
 
-idf_component_register(SRCS "${srcs}"
+if(CONFIG_DEVICE_ZIDONGSUO)
+    list(APPEND srcs "zidongsuo.c")
+endif()
+
+
+
+idf_component_register(SRCS "qtz.c" "${srcs}"
                         INCLUDE_DIRS "include"
                         REQUIRES "mqtt" "json" "button" "Battery" "nvs_flash")
 

@@ -32,7 +32,10 @@
 
 
 #ifndef BATTERY_ADC_CHANNEL
+// shutdown battery
 #define BATTERY_CLOSE_EN 1
+#define BATTERY_ADC_EN 0
+#define BATTERY_ADC_CHANNEL 0
 #endif
 
 #define ARRAY_DIM(a) (sizeof(a) / sizeof((a)[0]))
