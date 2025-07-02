@@ -227,15 +227,14 @@ class BaseVirtualDevice(ABC):
 
 
 class TD01Device(BaseVirtualDevice):
-    """TD01设备 - 双路调光插座"""
+    """TD01设备 - 单路调光插座"""
     
     def __init__(self, device_id: str, **kwargs):
         super().__init__(device_id, "TD01", **kwargs)
         
         # TD01特有属性
         self.properties.update({
-            "power1": {"value": 0, "readable": True, "writeable": True},  # 0-255
-            "power2": {"value": 0, "readable": True, "writeable": True}   # 0-255
+            "power": {"value": 0, "readable": True, "writeable": True}   # 0-255
         })
         
         # 按键模拟线程
@@ -243,7 +242,7 @@ class TD01Device(BaseVirtualDevice):
     
     def _device_init(self):
         """TD01设备初始化"""
-        self.logger.info("TD01 device initialized with power1=0, power2=0")
+        self.logger.info("TD01 device initialized with power=0")
         
         # 启动按键模拟任务
         self.button_thread = threading.Thread(target=self._button_simulation_task, daemon=True)
@@ -251,11 +250,8 @@ class TD01Device(BaseVirtualDevice):
     
     def _on_property_changed(self, property_name: str, value: Any, msg_id: int):
         """TD01属性变化处理"""
-        if property_name == "power1":
-            self.logger.info(f"Power1 set to {value} (PWM duty cycle)")
-            # 模拟PWM控制
-        elif property_name == "power2":
-            self.logger.info(f"Power2 set to {value} (PWM duty cycle)")
+        if property_name == "power":
+            self.logger.info(f"Power set to {value} (PWM duty cycle)")
             # 模拟PWM控制
     
     def _on_action(self, data: Dict[str, Any]):

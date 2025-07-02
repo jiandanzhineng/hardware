@@ -32,47 +32,44 @@
 
 ---
 
-## TD01 双路电机控制器
+## TD01 单路电机控制器
 
 **设备类型**: `TD01`  
-**描述**: 双路可调电机智能插座，支持两路独立的PWM电机控制
+**描述**: 单路可调电机智能插座，支持PWM电机控制
 
 ### 设备属性
 
 | 属性名 | 类型 | 读写权限 | 描述 | 默认值 | 范围 |
 |--------|------|----------|------|--------|---------|
-| `power1` | int | 读写 | 第一路功率控制 | 0 | 0-255 |
-| `power2` | int | 读写 | 第二路功率控制 | 0 | 0-255 |
+| `power` | int | 读写 | 功率控制 | 0 | 0-255 |
 
 ### 功能说明
 
-- **调光控制**: 通过PWM信号控制两路输出的亮度/功率
+- **功率控制**: 通过PWM信号控制输出的功率
 - **按键检测**: 内置按键，按下时触发`key_boot_clicked`动作
 - **实时响应**: 属性变化立即生效，无延迟
 
 ### 硬件接口
 
-- **GPIO 6**: 第一路调光输出 (DIMMABLE_GPIO_0)
-- **GPIO 7**: 第二路调光输出 (DIMMABLE_GPIO_1)
+- **GPIO 7**: 功率输出 (DIMMABLE_GPIO_1)
 - **GPIO 9**: 按键输入
 - **GPIO 2/3**: 开关控制输出
 
 ### 使用示例
 
 ```json
-// 设置第一路功率为50%
+// 设置功率为50%
 {
   "method": "set",
-  "key": "power1",
+  "key": "power",
   "value": 128,
   "msg_id": 1001
 }
 
-// 同时设置两路功率
+// 设置功率为最大值
 {
   "method": "update",
-  "power1": 255,
-  "power2": 100,
+  "power": 255,
   "msg_id": 1002
 }
 ```
@@ -450,8 +447,7 @@ class DeviceController:
 controller = DeviceController()
 
 # 控制TD01设备调光 (使用设备的MAC地址)
-controller.set_device_property("aabbccddeeff", "power1", 128)
-controller.set_device_property("aabbccddeeff", "power2", 200)
+controller.set_device_property("aabbccddeeff", "power", 128)
 
 # 控制自动锁开关
 controller.set_device_property("112233445566", "open", 1)
@@ -523,7 +519,7 @@ const controller = new DeviceController();
 
 // 控制设备 (使用设备的MAC地址)
 setTimeout(() => {
-    controller.setDeviceProperty('aabbccddeeff', 'power1', 255);
+    controller.setDeviceProperty('aabbccddeeff', 'power', 255);
     controller.setDeviceProperty('112233445566', 'open', 1);
     controller.getDeviceProperty('778899aabbcc', 'distance');
     

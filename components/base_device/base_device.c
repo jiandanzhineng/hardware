@@ -261,8 +261,11 @@ void mqtt_msg_process(char *topic, int topic_len, char *data, int data_len)
             // update property in root`s keys
             cJSON *child = root->child;
             while(child != NULL){
-                ESP_LOGI(TAG, "update property: %s", child->string);
-                set_property(child->string, child, msg_id);
+                // skip method field itself
+                if(strcmp(child->string, "method") != 0){
+                    ESP_LOGI(TAG, "update property: %s", child->string);
+                    set_property(child->string, child, msg_id);
+                }
                 child = child->next;
             }
         }
