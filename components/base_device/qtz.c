@@ -134,6 +134,7 @@ device_property_t button0_property;
 device_property_t button1_property;
 extern device_property_t device_type_property;
 extern device_property_t sleep_time_property;
+extern device_property_t battery_property;
 device_property_t *device_properties[] = {
     &device_type_property,
     &distance_property,
@@ -144,6 +145,7 @@ device_property_t *device_properties[] = {
     &high_band_property,
     &button0_property,
     &button1_property,
+    &battery_property,
 };
 int device_properties_num = sizeof(device_properties) / sizeof(device_properties[0]);
 
@@ -590,6 +592,9 @@ void report_all_properties(void)
 void on_device_init(void)
 {
     ESP_LOGI(TAG, "device_init");
+
+    nvs0_init();
+    nvs0_read();
     // init distance, it is a int
     distance_property.readable = true;
     distance_property.writeable = false;
@@ -665,8 +670,7 @@ void on_device_init(void)
     // start distance task
     xTaskCreate(check_distance_task, "check_distance_task", 1024 * 2, NULL, 10, NULL);
 
-    nvs0_init();
-    nvs0_read();
+
     // inout_divider_property.value.int_value = inout_divider;
     low_band_property.value.int_value = low_band;
     high_band_property.value.int_value = high_band;
