@@ -2,6 +2,7 @@
 #include "mqtt_client.h"
 #include "cJSON.h"
 #include "driver/ledc.h"
+#include "driver/gpio.h"
 
 #define DEVICE_TJS 1
 #define DEVICE_TD01 2
@@ -27,6 +28,7 @@
 #ifdef CONFIG_DEVICE_QTZ
     #define DEVICE_TYPE_INDEX DEVICE_QTZ
     #define DEVICE_TYPE_NAME "QTZ"
+    #define CONNECTED_LED GPIO_NUM_10
 #endif
 
 #ifdef CONFIG_DEVICE_ZIDONGSUO

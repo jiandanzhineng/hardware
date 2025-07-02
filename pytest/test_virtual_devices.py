@@ -36,7 +36,8 @@ class DeviceTestController:
         if rc == 0:
             logger.info("Test controller connected to MQTT broker")
             # 订阅所有设备的上报主题
-            client.subscribe("device/+/report")
+            client.subscribe("/dpub/+")
+            client.subscribe("/all")
         else:
             logger.error(f"Test controller failed to connect, return code {rc}")
     
@@ -48,7 +49,7 @@ class DeviceTestController:
             data = json.loads(payload)
             
             # 解析设备ID
-            device_id = topic.split('/')[1]
+            device_id = topic.split('/')[2] if topic.startswith('/dpub/') else 'unknown'
             logger.info(f"Received from {device_id}: {payload}")
             
         except Exception as e:
@@ -89,7 +90,7 @@ class DeviceTestController:
     
     def send_command_to_device(self, device_id: str, command: dict):
         """向指定设备发送命令"""
-        topic = f"device/{device_id}/command"
+        topic = f"/drecv/{device_id}"
         message = json.dumps(command)
         self.test_client.publish(topic, message, qos=1)
         logger.info(f"Sent command to {device_id}: {message}")
@@ -237,8 +238,9 @@ def main():
         print("  - ZIDONGSUO (zidongsuo_001): Automatic lock")
         print("  - QTZ (qtz_001): Ultrasonic distance sensor")
         print("\nMQTT Topics:")
-        print("  - Subscribe to: device/+/report (device reports)")
-        print("  - Publish to: device/{device_id}/command (device commands)")
+        print("  - Subscribe to: /dpub/+ (device reports)")
+        print("  - Subscribe to: /all (global broadcast)")
+        print("  - Publish to: /drecv/{device_id} (device commands)")
         print("\nPress Ctrl+C to stop all devices.")
         
         # 保持运行

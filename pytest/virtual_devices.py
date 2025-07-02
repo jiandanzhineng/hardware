@@ -39,8 +39,8 @@ class BaseVirtualDevice(ABC):
         }
         
         # MQTT主题
-        self.publish_topic = f"device/{device_id}/report"
-        self.subscribe_topic = f"device/{device_id}/command"
+        self.publish_topic = f"/dpub/{device_id}"
+        self.subscribe_topic = f"/drecv/{device_id}"
         
         # 运行状态
         self.running = False
@@ -59,6 +59,9 @@ class BaseVirtualDevice(ABC):
             self.logger.info(f"Connected to MQTT broker")
             client.subscribe(self.subscribe_topic)
             self.logger.info(f"Subscribed to {self.subscribe_topic}")
+            # 订阅公共topic
+            client.subscribe("/all")
+            self.logger.info(f"Subscribed to /all")
         else:
             self.logger.error(f"Failed to connect to MQTT broker, return code {rc}")
     
@@ -111,7 +114,7 @@ class BaseVirtualDevice(ABC):
         """发送属性响应"""
         if property_name in self.properties:
             response = {
-                "method": "response",
+                "method": "update",
                 "msg_id": msg_id,
                 "key": property_name,
                 "value": self.properties[property_name]["value"]
@@ -399,8 +402,8 @@ class QTZDevice(BaseVirtualDevice):
             "report_delay_ms": {"value": 10000, "readable": True, "writeable": True}, # 上报间隔
             "low_band": {"value": 60, "readable": True, "writeable": True},          # 低阈值
             "high_band": {"value": 150, "readable": True, "writeable": True},        # 高阈值
-            "button_io2": {"value": 0, "readable": True, "writeable": False},        # 按钮IO2状态 (0=释放, 1=按下)
-            "button_io3": {"value": 0, "readable": True, "writeable": False}         # 按钮IO3状态 (0=释放, 1=按下)
+            "button0": {"value": 0, "readable": True, "writeable": False},        # 按钮0状态 (0=释放, 1=按下)
+            "button1": {"value": 0, "readable": True, "writeable": False}         # 按钮1状态 (0=释放, 1=按下)
         })
         
         # 内部状态
@@ -435,12 +438,12 @@ class QTZDevice(BaseVirtualDevice):
             self.logger.info(f"High threshold set to {value}mm")
         elif property_name == "report_delay_ms":
             self.logger.info(f"Report delay set to {value}ms")
-        elif property_name == "button_io2":
+        elif property_name == "button0":
             state = "pressed" if value else "released"
-            self.logger.info(f"Button IO2 {state}")
-        elif property_name == "button_io3":
+            self.logger.info(f"Button 0 {state}")
+        elif property_name == "button1":
             state = "pressed" if value else "released"
-            self.logger.info(f"Button IO3 {state}")
+            self.logger.info(f"Button 1 {state}")
     
     def _on_action(self, data: Dict[str, Any]):
         """QTZ动作处理"""
@@ -449,14 +452,14 @@ class QTZDevice(BaseVirtualDevice):
             self.logger.warning(f"Distance LOW event triggered - current distance: {self.current_distance:.1f}mm")
         elif method == "high":
             self.logger.warning(f"Distance HIGH event triggered - current distance: {self.current_distance:.1f}mm")
-        elif method == "button_io2_pressed":
-            self.logger.info("Button IO2 pressed event")
-        elif method == "button_io2_released":
-            self.logger.info("Button IO2 released event")
-        elif method == "button_io3_pressed":
-            self.logger.info("Button IO3 pressed event")
-        elif method == "button_io3_released":
-            self.logger.info("Button IO3 released event")
+        elif method == "button0_pressed":
+            self.logger.info("Button 0 pressed event")
+        elif method == "button0_released":
+            self.logger.info("Button 0 released event")
+        elif method == "button1_pressed":
+            self.logger.info("Button 1 pressed event")
+        elif method == "button1_released":
+            self.logger.info("Button 1 released event")
     
     def _distance_detection_task(self):
         """VL6180X距离检测任务"""
@@ -524,46 +527,28 @@ class QTZDevice(BaseVirtualDevice):
         """按钮模拟任务 - 随机触发按钮事件"""
         while self.running:
             try:
-                # 随机等待时间（10-60秒）
-                wait_time = random.randint(10, 60)
+                wait_time = 5
                 time.sleep(wait_time)
                 
                 if not self.running:
                     break
                 
                 # 随机选择按钮（IO2或IO3）
-                button_name = random.choice(["button_io2", "button_io3"])
-                button_gpio = "IO2" if button_name == "button_io2" else "IO3"
+                button_name = random.choice(["button0", "button1"])
+                button_gpio = "0" if button_name == "button0" else "1"
                 
                 # 模拟按钮按下
                 self.properties[button_name]["value"] = 1
                 self.logger.info(f"Button {button_gpio} pressed (simulated)")
                 self._send_property_response(button_name, 0)
                 
-                # 按钮按下持续时间（100ms - 2秒）
-                press_duration = random.uniform(0.1, 2.0)
+                press_duration = 5
                 time.sleep(press_duration)
                 
                 # 模拟按钮释放
                 self.properties[button_name]["value"] = 0
                 self.logger.info(f"Button {button_gpio} released (simulated)")
                 self._send_property_response(button_name, 0)
-                
-                # 偶尔模拟连续按键（双击或多击）
-                if random.random() < 0.2:  # 20%概率连续按键
-                    time.sleep(random.uniform(0.1, 0.5))  # 短暂间隔
-                    
-                    # 再次按下
-                    self.properties[button_name]["value"] = 1
-                    self.logger.info(f"Button {button_gpio} pressed again (double-click)")
-                    self._send_property_response(button_name, 0)
-                    
-                    time.sleep(random.uniform(0.1, 1.0))
-                    
-                    # 再次释放
-                    self.properties[button_name]["value"] = 0
-                    self.logger.info(f"Button {button_gpio} released again")
-                    self._send_property_response(button_name, 0)
                 
             except Exception as e:
                 self.logger.error(f"Error in button simulation: {e}")
@@ -576,10 +561,10 @@ if __name__ == "__main__":
     
     try:
         # 创建各种设备实例
-        td01 = TD01Device("td01_001")
-        dianji = DianjiDevice("dianji_001")
-        zidongsuo = ZidongsuoDevice("zidongsuo_001")
-        qtz = QTZDevice("qtz_001")
+        td01 = TD01Device("td01001aabbc")
+        dianji = DianjiDevice("dianji001aab")
+        zidongsuo = ZidongsuoDevice("zidongsuo001")
+        qtz = QTZDevice("qtz001aabbcc")
         
         devices = [td01, dianji, zidongsuo, qtz]
         

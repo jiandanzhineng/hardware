@@ -29,8 +29,8 @@
 #define VL6180X_ADDRESS             0x29
 
 // 按钮GPIO定义
-#define BUTTON_IO2_GPIO             2
-#define BUTTON_IO3_GPIO             3
+#define BUTTON0_GPIO                2
+#define BUTTON1_GPIO                3
 
 static const char *TAG = "QTZ";
 static const char *VL6180X_TAG = "VL6180X";
@@ -122,16 +122,16 @@ typedef struct {
 static vl6180x_sensor_t sensor = {0};
 
 // 按钮句柄
-static button_handle_t button_io2_handle = NULL;
-static button_handle_t button_io3_handle = NULL;
+static button_handle_t button0_handle = NULL;
+static button_handle_t button1_handle = NULL;
 
 device_property_t distance_property;
 device_property_t report_delay_ms_property;
 // device_property_t inout_divider_property;
 device_property_t low_band_property;
 device_property_t high_band_property;
-device_property_t button_io2_property;
-device_property_t button_io3_property;
+device_property_t button0_property;
+device_property_t button1_property;
 extern device_property_t device_type_property;
 extern device_property_t sleep_time_property;
 device_property_t *device_properties[] = {
@@ -142,8 +142,8 @@ device_property_t *device_properties[] = {
     // &inout_divider_property,
     &low_band_property,
     &high_band_property,
-    &button_io2_property,
-    &button_io3_property,
+    &button0_property,
+    &button1_property,
 };
 int device_properties_num = sizeof(device_properties) / sizeof(device_properties[0]);
 
@@ -177,10 +177,10 @@ static void report_distance_task(void);
 static void check_distance_task(void);
 
 // 按钮回调函数声明
-static void button_io2_press_cb(void *arg, void *usr_data);
-static void button_io2_release_cb(void *arg, void *usr_data);
-static void button_io3_press_cb(void *arg, void *usr_data);
-static void button_io3_release_cb(void *arg, void *usr_data);
+static void button0_press_cb(void *arg, void *usr_data);
+static void button0_release_cb(void *arg, void *usr_data);
+static void button1_press_cb(void *arg, void *usr_data);
+static void button1_release_cb(void *arg, void *usr_data);
 static void init_buttons(void);
 
 void nvs0_init(void);
@@ -625,19 +625,19 @@ void on_device_init(void)
     high_band_property.value_type = PROPERTY_TYPE_INT;
     high_band_property.value.int_value = high_band;
 
-    // init button_io2, it is a int (0=released, 1=pressed)
-    button_io2_property.readable = true;
-    button_io2_property.writeable = false;
-    strcpy(button_io2_property.name, "button_io2");
-    button_io2_property.value_type = PROPERTY_TYPE_INT;
-    button_io2_property.value.int_value = 0;
+    // init button0, it is a int (0=released, 1=pressed)
+    button0_property.readable = true;
+    button0_property.writeable = false;
+    strcpy(button0_property.name, "button0");
+    button0_property.value_type = PROPERTY_TYPE_INT;
+    button0_property.value.int_value = 0;
 
-    // init button_io3, it is a int (0=released, 1=pressed)
-    button_io3_property.readable = true;
-    button_io3_property.writeable = false;
-    strcpy(button_io3_property.name, "button_io3");
-    button_io3_property.value_type = PROPERTY_TYPE_INT;
-    button_io3_property.value.int_value = 0;
+    // init button1, it is a int (0=released, 1=pressed)
+    button1_property.readable = true;
+    button1_property.writeable = false;
+    strcpy(button1_property.name, "button1");
+    button1_property.value_type = PROPERTY_TYPE_INT;
+    button1_property.value.int_value = 0;
 
     // 初始化按钮
     init_buttons();
@@ -744,82 +744,82 @@ void nvs0_set(void)
     nvs_close(my_handle);
 }
 
-// 按钮IO2按下回调函数
-static void button_io2_press_cb(void *arg, void *usr_data)
+// 按钮0按下回调函数
+static void button0_press_cb(void *arg, void *usr_data)
 {
-    ESP_LOGI(BUTTON_TAG, "Button IO2 pressed");
-    button_io2_property.value.int_value = 1;
-    get_property("button_io2", 0);
+    ESP_LOGI(BUTTON_TAG, "Button 0 pressed");
+    button0_property.value.int_value = 1;
+    get_property("button0", 0);
 }
 
-// 按钮IO2释放回调函数
-static void button_io2_release_cb(void *arg, void *usr_data)
+// 按钮0释放回调函数
+static void button0_release_cb(void *arg, void *usr_data)
 {
-    ESP_LOGI(BUTTON_TAG, "Button IO2 released");
-    button_io2_property.value.int_value = 0;
-    get_property("button_io2", 0);
+    ESP_LOGI(BUTTON_TAG, "Button 0 released");
+    button0_property.value.int_value = 0;
+    get_property("button0", 0);
 }
 
-// 按钮IO3按下回调函数
-static void button_io3_press_cb(void *arg, void *usr_data)
+// 按钮1按下回调函数
+static void button1_press_cb(void *arg, void *usr_data)
 {
-    ESP_LOGI(BUTTON_TAG, "Button IO3 pressed");
-    button_io3_property.value.int_value = 1;
-    get_property("button_io3", 0);
+    ESP_LOGI(BUTTON_TAG, "Button 1 pressed");
+    button1_property.value.int_value = 1;
+    get_property("button1", 0);
 }
 
-// 按钮IO3释放回调函数
-static void button_io3_release_cb(void *arg, void *usr_data)
+// 按钮1释放回调函数
+static void button1_release_cb(void *arg, void *usr_data)
 {
-    ESP_LOGI(BUTTON_TAG, "Button IO3 released");
-    button_io3_property.value.int_value = 0;
-    get_property("button_io3", 0);
+    ESP_LOGI(BUTTON_TAG, "Button 1 released");
+    button1_property.value.int_value = 0;
+    get_property("button1", 0);
 }
 
 // 初始化按钮
 static void init_buttons(void)
 {
-    // 配置按钮IO2
-    button_config_t btn_io2_cfg = {
+    // 配置按钮0
+    button_config_t btn0_cfg = {
         .type = BUTTON_TYPE_GPIO,
         .long_press_time = 1000,  // 长按时间1秒
         .short_press_time = 50,   // 短按时间50ms，用于消抖
         .gpio_button_config = {
-            .gpio_num = BUTTON_IO2_GPIO,
+            .gpio_num = BUTTON0_GPIO,
             .active_level = 0,  // 低电平有效
         },
     };
     
-    button_io2_handle = iot_button_create(&btn_io2_cfg);
-    if (button_io2_handle == NULL) {
-        ESP_LOGE(BUTTON_TAG, "Button IO2 create failed");
+    button0_handle = iot_button_create(&btn0_cfg);
+    if (button0_handle == NULL) {
+        ESP_LOGE(BUTTON_TAG, "Button 0 create failed");
         return;
     }
     
-    // 注册按钮IO2的按下和释放回调
-    iot_button_register_cb(button_io2_handle, BUTTON_PRESS_DOWN, button_io2_press_cb, NULL);
-    iot_button_register_cb(button_io2_handle, BUTTON_PRESS_UP, button_io2_release_cb, NULL);
+    // 注册按钮0的按下和释放回调
+    iot_button_register_cb(button0_handle, BUTTON_PRESS_DOWN, button0_press_cb, NULL);
+    iot_button_register_cb(button0_handle, BUTTON_PRESS_UP, button0_release_cb, NULL);
     
-    // 配置按钮IO3
-    button_config_t btn_io3_cfg = {
+    // 配置按钮1
+    button_config_t btn1_cfg = {
         .type = BUTTON_TYPE_GPIO,
         .long_press_time = 1000,  // 长按时间1秒
         .short_press_time = 50,   // 短按时间50ms，用于消抖
         .gpio_button_config = {
-            .gpio_num = BUTTON_IO3_GPIO,
+            .gpio_num = BUTTON1_GPIO,
             .active_level = 0,  // 低电平有效
         },
     };
     
-    button_io3_handle = iot_button_create(&btn_io3_cfg);
-    if (button_io3_handle == NULL) {
-        ESP_LOGE(BUTTON_TAG, "Button IO3 create failed");
+    button1_handle = iot_button_create(&btn1_cfg);
+    if (button1_handle == NULL) {
+        ESP_LOGE(BUTTON_TAG, "Button 1 create failed");
         return;
     }
     
-    // 注册按钮IO3的按下和释放回调
-    iot_button_register_cb(button_io3_handle, BUTTON_PRESS_DOWN, button_io3_press_cb, NULL);
-    iot_button_register_cb(button_io3_handle, BUTTON_PRESS_UP, button_io3_release_cb, NULL);
+    // 注册按钮1的按下和释放回调
+    iot_button_register_cb(button1_handle, BUTTON_PRESS_DOWN, button1_press_cb, NULL);
+    iot_button_register_cb(button1_handle, BUTTON_PRESS_UP, button1_release_cb, NULL);
     
     ESP_LOGI(BUTTON_TAG, "Buttons initialized successfully");
 }

@@ -218,8 +218,8 @@
 | `report_delay_ms` | int | 读写 | 上报间隔时间(ms) | 1000 | 100-10000 |
 | `low_band` | int | 读写 | 低阈值(mm) | 60 | 0-200 |
 | `high_band` | int | 读写 | 高阈值(mm) | 150 | 0-200 |
-| `button_io2` | int | 只读 | 按键2状态 | 0 | 0-1 |
-| `button_io3` | int | 只读 | 按键3状态 | 0 | 0-1 |
+| `button0` | int | 只读 | 按键0状态 | 0 | 0-1 |
+| `button1` | int | 只读 | 按键1状态 | 0 | 0-1 |
 
 ### 功能说明
 
@@ -232,8 +232,8 @@
 
 - **GPIO 4**: I2C SDA (I2C_MASTER_SDA_IO)
 - **GPIO 5**: I2C SCL (I2C_MASTER_SCL_IO)
-- **GPIO 2**: 按键2输入 (BUTTON_IO2_GPIO)
-- **GPIO 3**: 按键3输入 (BUTTON_IO3_GPIO)
+- **GPIO 2**: 按键0输入 (BUTTON0_GPIO)
+- **GPIO 3**: 按键1输入 (BUTTON1_GPIO)
 
 ### 传感器规格
 
@@ -339,7 +339,7 @@
 
 ```json
 {
-  "method": "response",
+  "method": "update",
   "msg_id": 1002,
   "key": "battery",
   "value": 85

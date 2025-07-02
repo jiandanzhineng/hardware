@@ -45,9 +45,10 @@ class MQTTMonitor:
         if rc == 0:
             logger.info(f"Connected to MQTT broker at {self.mqtt_broker}:{self.mqtt_port}")
             # 订阅所有设备相关主题
-            client.subscribe("device/+/report")
-            client.subscribe("device/+/command")
-            logger.info("Subscribed to device/+/report and device/+/command")
+            client.subscribe("/dpub/+")
+            client.subscribe("/drecv/+")
+            client.subscribe("/all")
+            logger.info("Subscribed to /dpub/+, /drecv/+, and /all")
         else:
             logger.error(f"Failed to connect to MQTT broker, return code {rc}")
     
@@ -60,9 +61,15 @@ class MQTTMonitor:
             
             # 解析主题
             topic_parts = topic.split('/')
-            if len(topic_parts) >= 3:
-                device_id = topic_parts[1]
-                message_type = topic_parts[2]  # report 或 command
+            if topic.startswith('/dpub/'):
+                device_id = topic_parts[2] if len(topic_parts) >= 3 else "unknown"
+                message_type = "report"
+            elif topic.startswith('/drecv/'):
+                device_id = topic_parts[2] if len(topic_parts) >= 3 else "unknown"
+                message_type = "command"
+            elif topic == '/all':
+                device_id = "broadcast"
+                message_type = "broadcast"
             else:
                 device_id = "unknown"
                 message_type = "unknown"
@@ -70,7 +77,7 @@ class MQTTMonitor:
             # 更新统计信息
             self.message_count += 1
             if device_id not in self.device_stats:
-                self.device_stats[device_id] = {"report": 0, "command": 0}
+                self.device_stats[device_id] = {"report": 0, "command": 0, "broadcast": 0}
             if message_type in self.device_stats[device_id]:
                 self.device_stats[device_id][message_type] += 1
             
@@ -95,6 +102,8 @@ class MQTTMonitor:
                 self._format_report_message(data)
             elif message_type == "command":
                 self._format_command_message(data)
+            elif message_type == "broadcast":
+                self._format_command_message(data)  # 广播消息通常是命令格式
             
             print(f"Raw Data:\n{formatted_data}")
             print(f"{'='*80}")
@@ -180,7 +189,7 @@ class MQTTMonitor:
             
             print(f"\n🚀 MQTT Monitor Started")
             print(f"📡 Broker: {self.mqtt_broker}:{self.mqtt_port}")
-            print(f"📋 Monitoring topics: device/+/report, device/+/command")
+            print(f"📋 Monitoring topics: /dpub/+, /drecv/+, /all")
             print(f"⏰ Started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
             print(f"\n{'='*80}")
             print("Waiting for messages... (Press Ctrl+C to stop)")
@@ -200,8 +209,8 @@ class MQTTMonitor:
         print(f"Devices monitored: {len(self.device_stats)}")
         
         for device_id, stats in self.device_stats.items():
-            total = stats.get('report', 0) + stats.get('command', 0)
-            print(f"  {device_id}: {total} messages (📊 {stats.get('report', 0)} reports, 📤 {stats.get('command', 0)} commands)")
+            total = stats.get('report', 0) + stats.get('command', 0) + stats.get('broadcast', 0)
+            print(f"  {device_id}: {total} messages (📊 {stats.get('report', 0)} reports, 📤 {stats.get('command', 0)} commands, 📢 {stats.get('broadcast', 0)} broadcasts)")
         
         print("\n👋 Monitor stopped.")
     
@@ -209,8 +218,9 @@ class MQTTMonitor:
         """打印帮助信息"""
         print("\n📖 MQTT Monitor Help:")
         print("\nMessage Types:")
-        print("  📊 REPORT - Device status reports (device/+/report)")
-        print("  📤 COMMAND - Commands sent to devices (device/+/command)")
+        print("  📊 REPORT - Device status reports (/dpub/+)")
+        print("  📤 COMMAND - Commands sent to devices (/drecv/+)")
+        print("  📢 BROADCAST - Global broadcast messages (/all)")
         print("\nDevice Types:")
         for code, desc in self.device_types.items():
             print(f"  {code} - {desc}")
@@ -233,11 +243,13 @@ def main():
     if args.help_topics:
         print("\n📖 MQTT Topics Help:")
         print("\nSubscribed Topics:")
-        print("  device/+/report - Device status reports and actions")
-        print("  device/+/command - Commands sent to devices")
+        print("  /dpub/+ - Device status reports and actions")
+        print("  /drecv/+ - Commands sent to devices")
+        print("  /all - Global broadcast messages")
         print("\nExample Topics:")
-        print("  device/td01_001/report - TD01 device reports")
-        print("  device/td01_001/command - Commands to TD01 device")
+        print("  /dpub/aabbccddeeff - TD01 device reports")
+        print("  /drecv/aabbccddeeff - Commands to TD01 device")
+        print("  /all - Broadcast to all devices")
         print("\nMessage Examples:")
         print("  Report: {'method': 'report', 'device_type': 'TD01', 'power1': 128, 'battery': 85}")
         print("  Command: {'method': 'set', 'key': 'power1', 'value': 255, 'msg_id': 1001}")

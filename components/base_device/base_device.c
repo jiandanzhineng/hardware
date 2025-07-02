@@ -25,12 +25,86 @@ extern device_property_t *device_properties[];
 
 long long last_msg_time = 0;
 
+#ifdef CONNECTED_LED
+static esp_timer_handle_t led_blink_timer = NULL;
+static esp_timer_handle_t led_off_timer = NULL;
+static bool led_blink_active = false;
+#endif
+
+
+#ifdef CONNECTED_LED
+static void led_blink_callback(void* arg)
+{
+    static bool led_state = false;
+    if (led_blink_active) {
+        led_state = !led_state;
+        gpio_set_level(CONNECTED_LED, led_state ? 0 : 1);  // 低电平有效，所以反转
+    }
+}
+
+static void led_off_callback(void* arg)
+{
+    led_blink_active = false;
+    gpio_set_level(CONNECTED_LED, 1);  // 关闭LED（高电平）
+    if (led_blink_timer) {
+        esp_timer_stop(led_blink_timer);
+    }
+}
+
+static void led_init(void)
+{
+    gpio_reset_pin(CONNECTED_LED);
+    gpio_set_direction(CONNECTED_LED, GPIO_MODE_OUTPUT);
+    gpio_set_level(CONNECTED_LED, 1);  // 初始状态关闭（高电平）
+}
+
+static void led_start_blink(void)
+{
+    if (led_blink_timer == NULL) {
+        const esp_timer_create_args_t blink_timer_args = {
+            .callback = &led_blink_callback,
+            .name = "led_blink"
+        };
+        esp_timer_create(&blink_timer_args, &led_blink_timer);
+    }
+    
+    led_blink_active = true;
+    esp_timer_start_periodic(led_blink_timer, 1000000);  // 每秒闪烁一次
+}
+
+static void led_constant_on_then_off(void)
+{
+    // 停止闪烁
+    led_blink_active = false;
+    if (led_blink_timer) {
+        esp_timer_stop(led_blink_timer);
+    }
+    
+    // 常亮
+    gpio_set_level(CONNECTED_LED, 0);  // 低电平有效，点亮LED
+    
+    // 创建10秒后关闭的定时器
+    if (led_off_timer == NULL) {
+        const esp_timer_create_args_t off_timer_args = {
+            .callback = &led_off_callback,
+            .name = "led_off"
+        };
+        esp_timer_create(&off_timer_args, &led_off_timer);
+    }
+    
+    esp_timer_start_once(led_off_timer, 10000000);  // 10秒后关闭
+}
+#endif
 
 void device_first_ready(void)
 {
     ESP_LOGI(TAG, "device_first_ready");
     // start heartbeat task every 30 seconds
     xTaskCreate(heartbeat_task, "heartbeat_task", 1024 * 2, NULL, 10, NULL);
+
+#ifdef CONNECTED_LED
+    led_constant_on_then_off();
+#endif
 
     on_device_first_ready();
     #ifndef BATTERY_CLOSE_EN
@@ -100,6 +174,12 @@ static void report_all_properties(void){
 void device_init(void)
 {
     ESP_LOGI(TAG, "device_init");
+    
+#ifdef CONNECTED_LED
+    led_init();
+    led_start_blink();
+#endif
+
     // init device_type, it is a string DEVICE_TYPE
     device_type_property.readable = true;
     device_type_property.writeable = false;

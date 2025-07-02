@@ -63,8 +63,11 @@
 ## MQTT通信协议
 
 ### 主题格式
-- **设备上报**: `device/{device_id}/report`
-- **设备命令**: `device/{device_id}/command`
+- **设备上报**: `/dpub/{mac_address}` (设备发布消息到此主题)
+- **设备命令**: `/drecv/{mac_address}` (设备订阅此主题接收命令)
+- **全局广播**: `/all` (所有设备都会订阅此主题)
+
+其中 `{mac_address}` 是设备的MAC地址，格式为12位十六进制字符串（如：`aabbccddeeff`）
 
 ### 消息格式
 
@@ -121,7 +124,7 @@
 #### 6. 属性响应 (Response)
 ```json
 {
-  "method": "response",
+  "method": "update",
   "msg_id": 1002,
   "key": "battery",
   "value": 85
@@ -184,19 +187,25 @@ device.start()
 ### 2. 发送MQTT命令
 ```bash
 # 使用mosquitto_pub发送命令
-mosquitto_pub -h localhost -t "device/td01_001/command" -m '{"method":"set","key":"power1","value":128,"msg_id":1001}'
+mosquitto_pub -h localhost -t "/drecv/aabbccddeeff" -m '{"method":"set","key":"power1","value":128,"msg_id":1001}'
 
 # 设置自动锁状态
-mosquitto_pub -h localhost -t "device/zidongsuo_001/command" -m '{"method":"set","key":"open","value":1,"msg_id":2001}'
+mosquitto_pub -h localhost -t "/drecv/112233445566" -m '{"method":"set","key":"open","value":1,"msg_id":2001}'
+
+# 发送全局广播命令
+mosquitto_pub -h localhost -t "/all" -m '{"method":"get","key":"battery","msg_id":3001}'
 ```
 
 ### 3. 监听设备上报
 ```bash
 # 监听所有设备上报
-mosquitto_sub -h localhost -t "device/+/report"
+mosquitto_sub -h localhost -t "/dpub/+"
+
+# 监听全局广播
+mosquitto_sub -h localhost -t "/all"
 
 # 监听特定设备
-mosquitto_sub -h localhost -t "device/td01_001/report"
+mosquitto_sub -h localhost -t "/dpub/aabbccddeeff"
 ```
 
 ## 测试场景
