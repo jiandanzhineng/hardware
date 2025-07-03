@@ -200,6 +200,14 @@
 
 - **按键事件**: 当按下设备按键时，发送`key_clicked`动作消息
 
+**示例**:
+```json
+{
+  "method": "action",
+  "action": "key_clicked"
+}
+```
+
 ---
 
 ## QTZ 激光测距传感器
