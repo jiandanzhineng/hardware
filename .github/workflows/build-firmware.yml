@@ -50,32 +50,13 @@ jobs:
         echo "Current device configuration:"
         grep -E "CONFIG_DEVICE_(TD01|DIANJI|QTZ|ZIDONGSUO)" sdkconfig || true
 
-    - name: Setup ESP-IDF
+    - name: ESP-IDF Build and Merge
       uses: espressif/esp-idf-ci-action@v1
       with:
         esp_idf_version: v5.2.3
         target: esp32c3
-
-    - name: Build firmware
-      run: |
-        . $IDF_PATH/export.sh
-        idf.py build
-
-    - name: Merge firmware files
-      run: |
-        . $IDF_PATH/export.sh
-        cd build
-        python -m esptool --chip esp32c3 merge-bin \
-          -o blufi_demo_${{ matrix.device_config.name }}_merged.bin \
-          --flash-mode dio \
-          --flash-freq 80m \
-          --flash-size 2MB \
-          0x0 bootloader/bootloader.bin \
-          0x8000 partition_table/partition-table.bin \
-          0x10000 blufi_demo.bin
-        
-        # 显示文件信息
-        ls -la blufi_demo_${{ matrix.device_config.name }}_merged.bin
+        path: '.'
+        command: 'idf.py build && cd build && esptool.py --chip esp32c3 merge_bin -o blufi_demo_${{ matrix.device_config.name }}_merged.bin @flash_args'
 
     - name: Upload firmware artifact
       uses: actions/upload-artifact@v4
