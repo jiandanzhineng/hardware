@@ -9,7 +9,7 @@ if(CONFIG_DEVICE_TD01)
 endif()
 
 if(CONFIG_DEVICE_QTZ)
-    list(APPEND srcs "QTZ.c")
+    list(APPEND srcs "qtz.c")
 endif()
 
 if(CONFIG_DEVICE_ZIDONGSUO)
