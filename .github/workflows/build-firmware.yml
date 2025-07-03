@@ -32,12 +32,6 @@ jobs:
       with:
         submodules: 'recursive'
 
-    - name: Setup ESP-IDF
-      uses: espressif/esp-idf-ci-action@v1
-      with:
-        esp_idf_version: v5.2.3
-        target: esp32c3
-
     - name: Configure device type
       run: |
         # 复制默认配置
@@ -55,6 +49,12 @@ jobs:
         # 显示当前配置
         echo "Current device configuration:"
         grep -E "CONFIG_DEVICE_(TD01|DIANJI|QTZ|ZIDONGSUO)" sdkconfig || true
+
+    - name: Setup ESP-IDF
+      uses: espressif/esp-idf-ci-action@v1
+      with:
+        esp_idf_version: v5.2.3
+        target: esp32c3
 
     - name: Build firmware
       run: |
