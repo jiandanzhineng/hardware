@@ -35,7 +35,7 @@ jobs:
     - name: Setup ESP-IDF
       uses: espressif/esp-idf-ci-action@v1
       with:
-        esp_idf_version: v5.1.2
+        esp_idf_version: v5.2.3
         target: esp32c3
 
     - name: Configure device type
