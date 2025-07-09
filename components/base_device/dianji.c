@@ -34,6 +34,9 @@
 
 #include "cJSON.h"
 
+#include "nvs_flash.h"
+#include "nvs.h"
+
 #include "base_device.h"
 #include "dianji.h"
 #include "device_common.h"
@@ -45,6 +48,7 @@ static const char *TAG = "dianji";
 device_property_t voltage_property;
 device_property_t delay_property;
 device_property_t shock_property;
+device_property_t safe_property;
 extern device_property_t device_type_property;
 extern device_property_t sleep_time_property;
 extern device_property_t battery_property;
@@ -56,6 +60,7 @@ device_property_t *device_properties[] = {
     &battery_property,
     &delay_property,
     &shock_property,
+    &safe_property,
 };
 
 int device_properties_num = sizeof(device_properties) / sizeof(device_properties[0]);
@@ -84,8 +89,7 @@ int device_properties_num = sizeof(device_properties) / sizeof(device_properties
 // 电池ADC检测引脚
 #define BAT_ADC 1
 
-// 每60s 上传mqtt数据
-#define V_UPDATE_TIME 60
+
 
 // PWM结构体
 ledc_timer_config_t ledc_timer = {
@@ -137,7 +141,6 @@ uint8_t v_open_close_flag = 0;
 int32_t remain_time = 0;
 
 
-void mqtt_rec_callback(const char *json_str);
 void init_gpio();
 void init_uart();
 void init_pwm();
@@ -148,9 +151,11 @@ void printf_log(void *arg);
 void get_bat_adc(void *arg);
 void pwm_output(void *arg);
 void output(void *arg);
-void mqtt_update(void *arg);
 void init_property();
 void stop_shock_task();
+void nvs_dianji_init(void);
+void nvs_dianji_read(void);
+void nvs_dianji_set(void);
 
 
 // 硬件初始化
@@ -162,7 +167,9 @@ void on_device_init()
     init_adc();
     init_pid();
     init_timer();
+    nvs_dianji_init();
 	init_property();
+    nvs_dianji_read();
 }
 
 // 创建任务
@@ -172,29 +179,17 @@ void on_device_first_ready()
     xTaskCreate(get_bat_adc, "get_bat_adc", 4096, NULL, 2, NULL);
     xTaskCreate(pwm_output, "pwm_output", 4096, NULL, 2, NULL);
     xTaskCreate(output, "output", 4096, NULL, 2, NULL);
-    //xTaskCreate(mqtt_update, "mqtt_update", 4096, NULL, 2, NULL);
     xTaskCreate(stop_shock_task, "stop_shock_task", 4096, NULL, 2, NULL);
 }
 
 void on_set_property(char *property_name, cJSON *property_value, int msg_id)
 {
-    //ESP_LOGI(TAG, "on_set_property property_name:%s", property_name);
-    // if(strcmp(property_name, "power1") == 0){
-    //     control_ledc(LEDC_CHANNEL_0, power1_property.value.int_value);
-    // }else if(strcmp(property_name, "power2") == 0){
-    //     control_ledc(LEDC_CHANNEL_1, power2_property.value.int_value);    
-    // }
-    // if(strcmp(property_name, "shock") == 0){
-    //     v_open_close_flag = shock_property.value.int_value;
-    //     // if (v_open_close_flag==0)
-    //     // {
-    //     //     ledc_stop(ledc_channel.speed_mode, ledc_channel.channel, 0);
-    //     // }
-    //     // else
-    //     // {
-    //     //     init_pwm();
-    //     // }
-    // }
+    ESP_LOGI(TAG, "on_set_property property_name:%s", property_name);
+    if (strcmp(property_name, "safe") == 0)
+    {
+        safe_property.value.int_value = property_value->valueint;
+        nvs_dianji_set();
+    }
 }
 
 void on_action(cJSON *root)
@@ -259,13 +254,13 @@ void trim_spaces(char* str) {
 void init_property()
 {
 	ESP_LOGI(TAG, "device_init");
-    // init power_property, it is a int between 0 and 500
+    // init voltage_property, voltage range depends on safe mode
     voltage_property.readable = true;
     voltage_property.writeable = true;
     strcpy(voltage_property.name, "voltage");
     voltage_property.value_type = PROPERTY_TYPE_INT;
     voltage_property.value.int_value = 0;
-    voltage_property.max = 100;
+    voltage_property.max = 80;  // 最大值80v，实际限制由safe property控制
     voltage_property.min = 0;
 
     // init delay_property, it is a int between 100 and 1000
@@ -284,61 +279,18 @@ void init_property()
     shock_property.value.int_value = 0;
     shock_property.max = 1;
     shock_property.min = 0;
+
+    // init safe_property, it is a int between 0 and 1
+    safe_property.readable = true;
+    safe_property.writeable = true;
+    strcpy(safe_property.name, "safe");
+    safe_property.value_type = PROPERTY_TYPE_INT;
+    safe_property.value.int_value = 1;  // 默认为安全模式
+    safe_property.max = 1;
+    safe_property.min = 0;
 }
 
-// 函数: 解析 JSON 并提取字段值
-int parse_json(const char* json_str, const char* key, char* value, int* is_number) {
-    char* start;
-    char* end;
-    char search_key[256];
-    snprintf(search_key, sizeof(search_key), "\"%s\":", key);
 
-    // 查找键的位置
-    start = strstr(json_str, search_key);
-    if (start == NULL) {
-        return -1;  // 未找到键
-    }
-
-    // 跳过键和值之间的 ":"
-    start += strlen(search_key);
-
-    // 跳过可能存在的空格
-    while (*start == ' ' || *start == '\t') {
-        start++;
-    }
-
-    // 如果值是字符串类型
-    if (*start == '\"') {
-        start++;  // 跳过开头的引号
-        end = strchr(start, '\"');
-        if (end == NULL) {
-            return -1;  // 格式错误：缺少闭合引号
-        }
-
-        // 提取字符串值
-        strncpy(value, start, end - start);
-        value[end - start] = '\0';
-
-        *is_number = 0;  // 标记这是一个字符串
-    } else {  // 如果值是数字类型
-        end = strchr(start, ',');
-        if (end == NULL) {
-            end = strchr(start, '}');
-        }
-
-        if (end == NULL) {
-            return -1;  // 格式错误：缺少闭合大括号
-        }
-
-        // 提取数字值（数字字符串）
-        strncpy(value, start, end - start);
-        value[end - start] = '\0';
-
-        *is_number = 1;  // 标记这是一个数字
-    }
-
-    return 0;
-}
 
 
 void on_mqtt_msg_process(char *topic, cJSON *root)
@@ -398,8 +350,10 @@ void PID_Init(PIDController *pid, float Kp, float Ki, float Kd, float dead_zone,
 
 // PID 输出
 float PID_Compute(PIDController *pid, float setpoint, float measured_value) {
-    if(setpoint > 100){
-        setpoint = 100;
+    // 根据safe property限制电压上限
+    float max_voltage = (safe_property.value.int_value == 1) ? 36.0f : 80.0f;
+    if(setpoint > max_voltage){
+        setpoint = max_voltage;
     }
     // 当前误差
     float error = setpoint - measured_value;
@@ -453,109 +407,7 @@ void init_pid(void)
 }
 
 
-// mqtt接收回调
-void mqtt_rec_callback(const char* json_str)
-{
-    char value[256];
-    int is_number;
-    // 解析 "method" 字段
-    if (parse_json(json_str, "method", value, &is_number) == 0) {
-        if (is_number) {
-            printf("method: (number) %s\n", value);
-        } else {
-            printf("method: (string) %s\n", value);
-        }
-    } else {
-        printf("Error parsing 'method'\n");
-    }
 
-    // 解析 "voltage" 字段
-    if (parse_json(json_str, "voltage", value, &is_number) == 0) {
-        if (is_number) {
-            int voltage = atoi(value);  // 将数字字符串转换为整数
-            target_v = voltage;
-            printf("voltage: %d\n", voltage);
-        } else {
-            printf("voltage: (string) %s\n", value);
-        }
-    } else {
-        printf("Error parsing 'voltage'\n");
-    }
-
-    // 解析 "delay" 字段
-    if (parse_json(json_str, "delay", value, &is_number) == 0) {
-        if (is_number) {
-            int delay = atoi(value);  // 将数字字符串转换为整数
-            v_delay =  delay;
-            printf("delay: %d\n", delay);
-        } else {
-            printf("delay: (string) %s\n", value);
-        }
-    } else {
-        printf("Error parsing 'delay'\n");
-    }
-
-    // 解析 "shock" 字段
-    if (parse_json(json_str, "shock", value, &is_number) == 0) {
-        if (is_number) {
-            int shock = atoi(value);  // 将数字字符串转换为整数
-            v_open_close_flag = shock;
-            if (v_open_close_flag==0)
-            {
-                ledc_stop(ledc_channel.speed_mode, ledc_channel.channel, 0);
-            }
-            else
-            {
-                init_pwm();
-            }
-            
-            printf("shock: %d\n", shock);
-        } else {
-            printf("shock: (string) %s\n", value);
-        }
-    } else {
-        printf("Error parsing 'shock'\n");
-    }
-    // 下面是pid参数，方便后续调参
-    // 解析 "pid_p" 字段
-    if (parse_json(json_str, "pid_p", value, &is_number) == 0) {
-        if (is_number) {
-            int pid_p = atoi(value);  // 将数字字符串转换为整数
-            pid.Kp = ((float)pid_p)/10000;
-            printf("pid_p: %d\n", pid_p);
-        } else {
-            printf("pid_p: (string) %s\n", value);
-        }
-    } else {
-        printf("Error parsing 'pid_p'\n");
-    }
-
-    // 解析 "pid_i" 字段
-    if (parse_json(json_str, "pid_i", value, &is_number) == 0) {
-        if (is_number) {
-            int pid_i = atoi(value);  // 将数字字符串转换为整数
-             pid.Ki = ((float)pid_i)/10000;
-            printf("pid_i: %d\n", pid_i);
-        } else {
-            printf("pid_i: (string) %s\n", value);
-        }
-    } else {
-        printf("Error parsing 'pid_i'\n");
-    }
-
-    // 解析 "pid_d" 字段
-    if (parse_json(json_str, "pid_d", value, &is_number) == 0) {
-        if (is_number) {
-            int pid_d = atoi(value);  // 将数字字符串转换为整数
-            pid.Kd = ((float)pid_d)/10000;
-            printf("pid_d: %d\n", pid_d);
-        } else {
-            printf("pid_d: (string) %s\n", value);
-        }
-    } else {
-        printf("Error parsing 'pid_d'\n");
-    }
-}
 
 
 
@@ -647,9 +499,19 @@ void get_bat_adc(void *arg)
 {
     while (1)
     {
+        // 启用电池电压检测电路
+        gpio_set_level(BAT_ADC_EN, 1);
+        // 等待电路稳定
+        vTaskDelay(pdMS_TO_TICKS(10));
+        
         float bat_v = ((float)(adc1_get_raw(BAT_ADC)))/BAT_ADC_K;
+        ESP_LOGI(TAG, "bat_v: %f", bat_v);
         bat_value = get_battery_percentage(bat_v);
 		battery_property.value.int_value = bat_value;
+        
+        // 关闭电池电压检测电路以节省功耗
+        gpio_set_level(BAT_ADC_EN, 0);
+        
         vTaskDelay(pdMS_TO_TICKS(30000));
     }
 }
@@ -752,50 +614,87 @@ void printf_log(void *arg)
         now_v = adc1_get_raw(BOOST_ADC) * BOOST_ADC_K;
         printf("now_v is %f\r\n",now_v);
         printf("target_v is %f\r\n",target_v);
-        printf("bat_v is %f\r\n",((float)(adc1_get_raw(BAT_ADC)))/(BAT_ADC_K));
         printf("pwm_f is %d\r\n",(int)pwm_f);
         printf("pid is %f %f %f\r\n",pid.Kp,pid.Ki,pid.Kd);
         vTaskDelay(pdMS_TO_TICKS(3000));
     }
 }
 
-
-// json上传的数据
-void generate_json(char *json_str, int voltage, int delay, int shock, int battery)
+void nvs_dianji_init(void)
 {
-	// 使用 sprintf 格式化 JSON 字符串并存储到 json_str 数组中
-	sprintf(json_str,
-	        "{\n"
-	        "  \"method\": \"update\",\n"
-	        "  \"voltage\": %d,\n"
-	        "  \"delay\": %d,\n"
-	        "  \"shock\": %d,\n"
-	        "  \"battery\": %d\n"
-	        "}",
-	        voltage, delay, shock, battery);
+    esp_err_t err = nvs_flash_init();
+    if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND)
+    {
+        // NVS partition was truncated and needs to be erased
+        // Retry nvs_flash_init
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        err = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(err);
 }
 
-extern char publish_topic[32];
-// 每一定时间上传数据
-void mqtt_update(void *arg)
+void nvs_dianji_read(void)
 {
-    char json_str[256];
-    while (1)
+    nvs_handle_t my_handle;
+    esp_err_t err = nvs_open("dianji_storage", NVS_READWRITE, &my_handle);
+    if (err != ESP_OK)
     {
-        // 调用 generate_json 函数，传入动态的值
-	    generate_json(json_str, target_v,v_delay , v_open_close_flag, bat_value);
+        ESP_LOGE(TAG, "Error (%s) opening NVS handle!", esp_err_to_name(err));
+    }
+    else
+    {
+        ESP_LOGI(TAG, "NVS handle opened successfully");
+        // Read safe property
+        int32_t safe_value = 1; // default value
+        err = nvs_get_i32(my_handle, "safe", &safe_value);
+        switch (err)
+        {
+        case ESP_OK:
+            ESP_LOGI(TAG, "Read safe value from NVS: %d", (int)safe_value);
+            safe_property.value.int_value = safe_value;
+            break;
+        case ESP_ERR_NVS_NOT_FOUND:
+            ESP_LOGI(TAG, "Safe value not found in NVS, using default: 1");
+            break;
+        default:
+            ESP_LOGE(TAG, "Error (%s) reading safe value!", esp_err_to_name(err));
+        }
+        nvs_close(my_handle);
+    }
+}
 
-        // 打印生成的 JSON 字符串
-        printf("publish topic is%s\n", publish_topic);
-        printf("publish data is%s\n", json_str);
-
-        voltage_property.value.int_value = target_v;
-        battery_property.value.int_value = bat_value;
-        delay_property.value.int_value = v_delay;
-        shock_property.value.int_value = v_open_close_flag;
-
-        // esp_mqtt_client_publish(smqtt_client, publish_topic, json_str, 0, 1, 0);
-        vTaskDelay(pdMS_TO_TICKS(V_UPDATE_TIME * 1000));
+void nvs_dianji_set(void)
+{
+    nvs_handle_t my_handle;
+    esp_err_t err = nvs_open("dianji_storage", NVS_READWRITE, &my_handle);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Error (%s) opening NVS handle!", esp_err_to_name(err));
+    }
+    else
+    {
+        ESP_LOGI(TAG, "Writing safe value to NVS: %d", safe_property.value.int_value);
+        err = nvs_set_i32(my_handle, "safe", safe_property.value.int_value);
+        if (err != ESP_OK)
+        {
+            ESP_LOGE(TAG, "Error (%s) writing safe value!", esp_err_to_name(err));
+        }
+        else
+        {
+            ESP_LOGI(TAG, "Safe value written successfully");
+        }
+        
+        ESP_LOGI(TAG, "Committing updates in NVS...");
+        err = nvs_commit(my_handle);
+        if (err != ESP_OK)
+        {
+            ESP_LOGE(TAG, "Error (%s) committing NVS!", esp_err_to_name(err));
+        }
+        else
+        {
+            ESP_LOGI(TAG, "NVS commit successful");
+        }
+        nvs_close(my_handle);
     }
 }
 
