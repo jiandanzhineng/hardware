@@ -244,9 +244,9 @@ class TD01Device(BaseVirtualDevice):
         """TD01设备初始化"""
         self.logger.info("TD01 device initialized with power=0")
         
-        # 启动按键模拟任务
-        self.button_thread = threading.Thread(target=self._button_simulation_task, daemon=True)
-        self.button_thread.start()
+        # GUI控制模式下不启动自动按键模拟
+        # self.button_thread = threading.Thread(target=self._button_simulation_task, daemon=True)
+        # self.button_thread.start()
     
     def _on_property_changed(self, property_name: str, value: Any, msg_id: int):
         """TD01属性变化处理"""
@@ -356,9 +356,9 @@ class ZidongsuoDevice(BaseVirtualDevice):
         """自动锁设备初始化"""
         self.logger.info("ZIDONGSUO device initialized - lock closed")
         
-        # 启动按键模拟任务
-        self.button_thread = threading.Thread(target=self._button_simulation_task, daemon=True)
-        self.button_thread.start()
+        # GUI控制模式下不启动自动按键模拟
+        # self.button_thread = threading.Thread(target=self._button_simulation_task, daemon=True)
+        # self.button_thread.start()
     
     def _on_property_changed(self, property_name: str, value: Any, msg_id: int):
         """自动锁属性变化处理"""
@@ -422,9 +422,9 @@ class QTZDevice(BaseVirtualDevice):
         self.distance_thread = threading.Thread(target=self._distance_detection_task, daemon=True)
         self.distance_thread.start()
         
-        # 启动按钮模拟任务
-        self.button_thread = threading.Thread(target=self._button_simulation_task, daemon=True)
-        self.button_thread.start()
+        # GUI控制模式下不启动自动按键模拟
+        # self.button_thread = threading.Thread(target=self._button_simulation_task, daemon=True)
+        # self.button_thread.start()
     
     def _on_property_changed(self, property_name: str, value: Any, msg_id: int):
         """QTZ属性变化处理"""

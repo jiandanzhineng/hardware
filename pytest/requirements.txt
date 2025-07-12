@@ -1,2 +1,7 @@
-# Python虚拟设备依赖包
+# Python virtual device dependencies
 paho-mqtt>=1.6.0
+
+# GUI controller dependencies (tkinter is included in Python standard library)
+# For advanced GUI features, consider adding:
+# pillow>=8.0.0  # for image processing
+# matplotlib>=3.0.0  # for chart display

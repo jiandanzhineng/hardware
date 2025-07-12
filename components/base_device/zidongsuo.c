@@ -22,8 +22,15 @@
 
 static const char *TAG = "zidongsuo";
 
+// Emergency mode flag and related variables
+static bool emergency_mode_flag = false;
+static int64_t button_press_start_time = 0;
+static bool button_is_pressed = false;
+static bool long_press_triggered = false;
+
 // Function declarations
 void set_servo_angle(float angle);
+void emergency_mode_task(void *pvParameters);
 
 // Define GPIO and ADC pins
 #define BAT_EN_GPIO         GPIO_NUM_1    // GPIO pin connected to BAT_EN (adjust as needed)
@@ -61,20 +68,20 @@ void button_single_click_cb(void *arg, void *usr_data)
     esp_mqtt_client_publish(smqtt_client, publish_topic, json_data, 0, 1, 0);
     cJSON_Delete(root);
     free(json_data);
-    
-    // // Toggle servo position when button is clicked
-    // if (open_property.value.int_value == 0) {
-    //     open_property.value.int_value = 1;
-    // } else {
-    //     open_property.value.int_value = 0;
-    // }
-    
-    // // Update servo position
-    // float angle = open_property.value.int_value ? 180.0f : 0.0f;
-    // set_servo_angle(angle);
-    
-    // // Update LED state
-    // gpio_set_level(LED_PIN, !open_property.value.int_value);
+}
+
+void button_press_down_cb(void *arg, void *usr_data)
+{
+    ESP_LOGI(TAG, "BUTTON_PRESS_DOWN");
+    button_is_pressed = true;
+    button_press_start_time = esp_timer_get_time();
+    long_press_triggered = false;  // Reset long press trigger flag
+}
+
+void button_press_up_cb(void *arg, void *usr_data)
+{
+    ESP_LOGI(TAG, "BUTTON_PRESS_UP");
+    button_is_pressed = false;
 }
 
 void on_mqtt_msg_process(char *topic, cJSON *root){
@@ -222,13 +229,61 @@ void battery_task(void *pvParameters)
         battery_property.value.int_value = battery_percentage;
         ESP_LOGI(TAG, "Battery Percentage: %d%%", battery_percentage);
         
+        // Check if battery is below 20% and activate emergency mode
+        if (battery_percentage < 20) {
+            ESP_LOGI(TAG, "Battery below 20%%, activating emergency mode");
+            emergency_mode_flag = true;
+        }
+        
         // Wait for 30 seconds before next reading
         vTaskDelay(pdMS_TO_TICKS(30000));
     }
 }
 
-
-
+// Emergency mode task - opens device every 10 seconds when flag is set
+void emergency_mode_task(void *pvParameters)
+{
+    while (1) {
+        // Check if button has been pressed for more than 60 seconds
+        if (button_is_pressed && !long_press_triggered) {
+            int64_t press_duration = esp_timer_get_time() - button_press_start_time;
+            if (press_duration >= 6000000) { // 60 seconds in microseconds
+                ESP_LOGI(TAG, "Button pressed for more than 60 seconds, activating emergency mode");
+                emergency_mode_flag = true;
+                long_press_triggered = true;  // Prevent multiple triggers
+            }
+        }
+        
+        if (emergency_mode_flag) {
+            ESP_LOGI(TAG, "Emergency mode active - opening device");
+            
+            // Set open property to 1 (open)
+            open_property.value.int_value = 1;
+            
+            // Update servo position to open (0 degrees)
+            set_servo_angle(0.0f);
+            
+            // Update LED state (turn off LED when open)
+            gpio_set_level(LED_PIN, 0);
+            
+            // Publish MQTT message about emergency opening
+            cJSON *root = cJSON_CreateObject();
+            cJSON_AddStringToObject(root, "method", "action");
+            cJSON_AddStringToObject(root, "action", "emergency_open");
+            char *json_data = cJSON_Print(root);
+            ESP_LOGI(TAG, "Emergency open json_data: %s", json_data);
+            esp_mqtt_client_publish(smqtt_client, publish_topic, json_data, 0, 1, 0);
+            cJSON_Delete(root);
+            free(json_data);
+            
+            // Wait for 10 seconds before next emergency open
+            vTaskDelay(pdMS_TO_TICKS(10000));
+        } else {
+            // If not in emergency mode, check every second
+            vTaskDelay(pdMS_TO_TICKS(1000));
+        }
+    }
+}
 
 // Convert angle to PWM duty cycle
 uint32_t angle_to_duty(float angle) {
@@ -302,12 +357,17 @@ void on_device_init(void){
         ESP_LOGE(TAG, "Button create failed");
     }
     iot_button_register_cb(gpio_btn, BUTTON_SINGLE_CLICK, button_single_click_cb, NULL);
+    iot_button_register_cb(gpio_btn, BUTTON_PRESS_DOWN, button_press_down_cb, NULL);
+    iot_button_register_cb(gpio_btn, BUTTON_PRESS_UP, button_press_up_cb, NULL);
     
     // Initialize battery measurement
     battery_measurement_init();
     
     // Create battery monitoring task
     xTaskCreate(battery_task, "battery_task", 2048, NULL, 5, NULL);
+    
+    // Create emergency mode task
+    xTaskCreate(emergency_mode_task, "emergency_mode_task", 2048, NULL, 4, NULL);
 }
 
 void on_device_first_ready(void){
