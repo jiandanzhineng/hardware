@@ -28,6 +28,10 @@ static int64_t button_press_start_time = 0;
 static bool button_is_pressed = false;
 static bool long_press_triggered = false;
 
+// Low battery detection counter
+static int low_battery_count = 0;
+static const int LOW_BATTERY_THRESHOLD_COUNT = 3;
+
 // Function declarations
 void set_servo_angle(float angle);
 void emergency_mode_task(void *pvParameters);
@@ -229,10 +233,22 @@ void battery_task(void *pvParameters)
         battery_property.value.int_value = battery_percentage;
         ESP_LOGI(TAG, "Battery Percentage: %d%%", battery_percentage);
         
-        // Check if battery is below 20% and activate emergency mode
+        // Check if battery is below 20% and count consecutive low readings
         if (battery_percentage < 20) {
-            ESP_LOGI(TAG, "Battery below 20%%, activating emergency mode");
-            emergency_mode_flag = true;
+            low_battery_count++;
+            ESP_LOGI(TAG, "Battery below 20%% (count: %d/%d)", low_battery_count, LOW_BATTERY_THRESHOLD_COUNT);
+            
+            // Activate emergency mode only after 3 consecutive low readings
+            if (low_battery_count >= LOW_BATTERY_THRESHOLD_COUNT) {
+                ESP_LOGI(TAG, "Battery below 20%% for %d consecutive readings, activating emergency mode", LOW_BATTERY_THRESHOLD_COUNT);
+                emergency_mode_flag = true;
+            }
+        } else {
+            // Reset counter if battery is above 20%
+            if (low_battery_count > 0) {
+                ESP_LOGI(TAG, "Battery above 20%%, resetting low battery counter");
+                low_battery_count = 0;
+            }
         }
         
         // Wait for 30 seconds before next reading
@@ -247,7 +263,7 @@ void emergency_mode_task(void *pvParameters)
         // Check if button has been pressed for more than 60 seconds
         if (button_is_pressed && !long_press_triggered) {
             int64_t press_duration = esp_timer_get_time() - button_press_start_time;
-            if (press_duration >= 6000000) { // 60 seconds in microseconds
+            if (press_duration >= 60000000) { // 60 seconds in microseconds
                 ESP_LOGI(TAG, "Button pressed for more than 60 seconds, activating emergency mode");
                 emergency_mode_flag = true;
                 long_press_triggered = true;  // Prevent multiple triggers
