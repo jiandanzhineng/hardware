@@ -113,9 +113,9 @@ float BOOST_ADC_K = 0.026;
 float BAT_ADC_K = 363.2;
 
 // PID 参数
-float pid_Kp = 2.0f;
-float pid_Ki = 0.05f;
-float pid_Kd = 8.0f;
+float pid_Kp = 1.0f;//2.0f; //
+float pid_Ki = 0.05f;//0.05f;
+float pid_Kd = 0.1f;//8.0f;
 float pid_dead_zone = 2.0f;
 float pid_max_integral = 25.0f;
 float pid_min_integral = -25.0f;
