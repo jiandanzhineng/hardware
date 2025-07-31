@@ -534,16 +534,9 @@ void app_main(void)
 {
     esp_err_t ret;
 
-    gpio_reset_pin(12);
-    gpio_set_direction(12, GPIO_MODE_OUTPUT);
-    gpio_set_level(12, 1);
-    vTaskDelay(100 / portTICK_PERIOD_MS);
-    gpio_set_level(12, 0);
-
-
-
-
     // Initialize NVS
+    ESP_LOGI(TAG, "Initializing NVS");
+
     ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND)
     {
@@ -551,10 +544,13 @@ void app_main(void)
         ret = nvs_flash_init();
     }
     ESP_ERROR_CHECK(ret);
+    ESP_LOGI(TAG, "NVS initialized");
 
     initialise_wifi();
+    ESP_LOGI(TAG, "WiFi initialized");
 
     ESP_ERROR_CHECK(esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT));
+    ESP_LOGI(TAG, "Bluetooth controller memory released");
 
     esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
     ret = esp_bt_controller_init(&bt_cfg);
@@ -562,6 +558,7 @@ void app_main(void)
     {
         BLUFI_ERROR("%s initialize bt controller failed: %s\n", __func__, esp_err_to_name(ret));
     }
+    ESP_LOGI(TAG, "Bluetooth controller initialized");
 
     ret = esp_bt_controller_enable(ESP_BT_MODE_BLE);
     if (ret)
@@ -569,6 +566,8 @@ void app_main(void)
         BLUFI_ERROR("%s enable bt controller failed: %s\n", __func__, esp_err_to_name(ret));
         return;
     }
+    ESP_LOGI(TAG, "Bluetooth controller enabled");
+
 
     ret = esp_blufi_host_and_cb_init(&example_callbacks);
     if (ret)
