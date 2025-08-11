@@ -404,6 +404,7 @@ class QTZDevice(BaseVirtualDevice):
         
         # 内部状态
         self.distance_thread = None
+        self.report_thread = None
         self.button_thread = None
         self.current_distance = 100.0
         self.average_distance = 100.0
@@ -412,7 +413,7 @@ class QTZDevice(BaseVirtualDevice):
         
         # VL6180X传感器特性
         self.sensor_noise = 2.0  # 传感器噪声
-        self.measurement_range = (10, 200)  # VL6180X测量范围10-200mm
+        self.measurement_range = (10, 500)  # VL6180X测量范围10-500mm
     
     def _device_init(self):
         """QTZ设备初始化"""
@@ -421,6 +422,10 @@ class QTZDevice(BaseVirtualDevice):
         # 启动距离检测任务
         self.distance_thread = threading.Thread(target=self._distance_detection_task, daemon=True)
         self.distance_thread.start()
+        
+        # 启动距离上报任务（模拟qtz.c中的report_distance_task）
+        self.report_thread = threading.Thread(target=self._distance_report_task, daemon=True)
+        self.report_thread.start()
         
         # GUI控制模式下不启动自动按键模拟
         # self.button_thread = threading.Thread(target=self._button_simulation_task, daemon=True)
@@ -467,7 +472,7 @@ class QTZDevice(BaseVirtualDevice):
                 
                 # 模拟物体移动：缓慢变化 + 偶尔快速变化
                 if random.random() < 0.05:  # 5%概率快速变化（物体快速移动）
-                    self.current_distance += random.uniform(-20, 20)
+                    self.current_distance += random.uniform(-50, 50)
                 else:  # 95%概率缓慢变化
                     self.current_distance += random.uniform(-2, 2)
                 
@@ -518,6 +523,21 @@ class QTZDevice(BaseVirtualDevice):
             except Exception as e:
                  self.logger.error(f"Error in distance detection: {e}")
                  time.sleep(1)
+    
+    def _distance_report_task(self):
+        """距离上报任务 - 模拟qtz.c中的report_distance_task"""
+        while self.running:
+            try:
+                # 上报距离属性（模拟get_property("distance", 0)）
+                self._send_property_response("distance", 0)
+                
+                # 按照report_delay_ms间隔等待
+                report_delay_ms = self.properties["report_delay_ms"]["value"]
+                time.sleep(report_delay_ms / 1000.0)  # 转换为秒
+                
+            except Exception as e:
+                self.logger.error(f"Error in distance report: {e}")
+                time.sleep(1)
     
     def _button_simulation_task(self):
         """按钮模拟任务 - 随机触发按钮事件"""
