@@ -525,7 +525,7 @@ static void check_distance_task(void)
             ESP_LOGE(VL6180X_TAG, "传感器超时");
         } else {
             distance_property.value.float_value = (float)distance;
-            average_length_mm = 0.7 * average_length_mm + 0.3 * distance_property.value.float_value;
+            average_length_mm = distance_property.value.float_value;
             //ESP_LOGI(VL6180X_TAG, "距离: %.2f mm 平均:%.2f mm", distance_property.value.float_value, average_length_mm);
             update_in_state();
         }
