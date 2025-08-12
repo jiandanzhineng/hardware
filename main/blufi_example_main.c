@@ -202,13 +202,6 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
         break;
     case WIFI_EVENT_STA_DISCONNECTED:
         BLUFI_INFO("BLUFI WIFI_EVENT_STA_DISCONNECTED\n");
-        esp_err_t ret;
-        ret = esp_bt_controller_enable(ESP_BT_MODE_BLE);
-        if (ret)
-        {
-            BLUFI_ERROR("%s enable bt controller failed: %s\n", __func__, esp_err_to_name(ret));
-            return;
-        }
         /* Only handle reconnection during connecting */
         if (gl_sta_connected == false && example_wifi_reconnect() == false)
         {
@@ -534,6 +527,9 @@ void app_main(void)
 {
     esp_err_t ret;
 
+    // get mac
+    get_mac_address();
+
     // Initialize NVS
     ESP_LOGI(TAG, "Initializing NVS");
 
@@ -578,12 +574,10 @@ void app_main(void)
 
     BLUFI_INFO("BLUFI VERSION %04x\n", esp_blufi_get_version());
 
-    get_mac_address();
+    
 
     device_init();
 
-    // set GPIO12 high
-    gpio_set_level(12, 1);
     while (1)
     {
         vTaskDelay(1000 / portTICK_PERIOD_MS);
