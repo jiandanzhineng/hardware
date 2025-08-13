@@ -144,3 +144,7 @@ void dimmable_plug_pwm_init(void)
     ESP_ERROR_CHECK(ledc_set_duty(LEDC_MODE, LEDC_CHANNEL_1, 0));
     ESP_ERROR_CHECK(ledc_update_duty(LEDC_MODE, LEDC_CHANNEL_1));
 }
+
+void on_device_before_sleep(void){
+    // TD01 device has no special cleanup before sleep
+}

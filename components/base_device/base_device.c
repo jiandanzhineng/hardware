@@ -134,6 +134,8 @@ static void sleep_check_task(void){
         ESP_LOGI(TAG, "uptime: %lld, no message time: %lld/%d", esp_timer_get_time() / 1000000, esp_timer_get_time() / 1000000 - last_msg_time, sleep_time_property.value.int_value);
         if(esp_timer_get_time() / 1000000 - last_msg_time > sleep_time_property.value.int_value){
             ESP_LOGI(TAG, "long time no message, deep sleep");
+            on_device_before_sleep();
+            vTaskDelay(pdMS_TO_TICKS(1000));
             esp_deep_sleep_start();
         }
     }

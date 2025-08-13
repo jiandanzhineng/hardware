@@ -827,3 +827,7 @@ static void init_buttons(void)
     
     ESP_LOGI(BUTTON_TAG, "Buttons initialized successfully");
 }
+
+void on_device_before_sleep(void){
+    // QTZ device has no special cleanup before sleep
+}

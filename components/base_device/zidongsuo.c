@@ -326,7 +326,7 @@ void on_device_init(void){
     open_property.writeable = true;
     strcpy(open_property.name, "open");
     open_property.value_type = PROPERTY_TYPE_INT;
-    open_property.value.int_value = 0;
+    open_property.value.int_value = 1;
     
     // Configure LED
     gpio_config_t io_conf = {};
@@ -356,7 +356,7 @@ void on_device_init(void){
     
     // Initial state - LED off initially
     gpio_set_level(LED_PIN, 1);
-    // set_servo_angle(0);
+    set_servo_angle(0);
     
     // Create button with iot_button library
     button_config_t gpio_btn_cfg = {
@@ -393,5 +393,10 @@ void on_device_first_ready(void){
 
 void on_action(cJSON *root){
     
+}
+
+void on_device_before_sleep(void){
+    ESP_LOGI(TAG, "Device about to sleep, activating emergency mode");
+    emergency_mode_flag = true;
 }
 

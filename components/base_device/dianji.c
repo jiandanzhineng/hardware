@@ -663,6 +663,10 @@ void nvs_dianji_read(void)
     }
 }
 
+void on_device_before_sleep(void){
+    // DIANJI device has no special cleanup before sleep
+}
+
 void nvs_dianji_set(void)
 {
     nvs_handle_t my_handle;
