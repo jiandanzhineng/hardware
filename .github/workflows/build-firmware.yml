@@ -14,16 +14,14 @@ jobs:
         device_config:
           - name: "TD01"
             config: "CONFIG_DEVICE_TD01=y"
-            disable: ["CONFIG_DEVICE_DIANJI", "CONFIG_DEVICE_QTZ", "CONFIG_DEVICE_ZIDONGSUO"]
           - name: "DIANJI"
             config: "CONFIG_DEVICE_DIANJI=y"
-            disable: ["CONFIG_DEVICE_TD01", "CONFIG_DEVICE_QTZ", "CONFIG_DEVICE_ZIDONGSUO"]
           - name: "QTZ"
             config: "CONFIG_DEVICE_QTZ=y"
-            disable: ["CONFIG_DEVICE_TD01", "CONFIG_DEVICE_DIANJI", "CONFIG_DEVICE_ZIDONGSUO"]
           - name: "ZIDONGSUO"
             config: "CONFIG_DEVICE_ZIDONGSUO=y"
-            disable: ["CONFIG_DEVICE_TD01", "CONFIG_DEVICE_DIANJI", "CONFIG_DEVICE_QTZ"]
+          - name: "PJ01"
+            config: "CONFIG_DEVICE_PJ01=y"
 
     steps:
     - name: Checkout repository
@@ -36,18 +34,12 @@ jobs:
         # 复制默认配置
         cp sdkconfig.defaults.esp32c3 sdkconfig
         
-        # 禁用所有设备类型
-        for config in ${{ join(matrix.device_config.disable, ' ') }}; do
-          sed -i "s/^${config}=y/# ${config} is not set/g" sdkconfig
-          echo "# ${config} is not set" >> sdkconfig
-        done
-        
         # 启用当前设备类型
         echo "${{ matrix.device_config.config }}" >> sdkconfig
         
         # 显示当前配置
         echo "Current device configuration:"
-        grep -E "CONFIG_DEVICE_(TD01|DIANJI|QTZ|ZIDONGSUO)" sdkconfig || true
+        grep -E "CONFIG_DEVICE_(TD01|DIANJI|QTZ|ZIDONGSUO|PJ01)" sdkconfig || true
 
     - name: ESP-IDF Build and Merge
       uses: espressif/esp-idf-ci-action@v1
@@ -95,6 +87,7 @@ jobs:
           firmware-files/firmware-DIANJI/blufi_demo_DIANJI_merged.bin
           firmware-files/firmware-QTZ/blufi_demo_QTZ_merged.bin
           firmware-files/firmware-ZIDONGSUO/blufi_demo_ZIDONGSUO_merged.bin
+          firmware-files/firmware-PJ01/blufi_demo_PJ01_merged.bin
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -104,7 +97,7 @@ jobs:
         echo "" >> firmware_summary.md
         echo "Built firmware for the following device types:" >> firmware_summary.md
         echo "" >> firmware_summary.md
-        for device in TD01 DIANJI QTZ ZIDONGSUO; do
+        for device in TD01 DIANJI QTZ ZIDONGSUO PJ01; do
           if [ -f "firmware-files/firmware-${device}/blufi_demo_${device}_merged.bin" ]; then
             size=$(stat -c%s "firmware-files/firmware-${device}/blufi_demo_${device}_merged.bin" 2>/dev/null || echo "Unknown")
             echo "- **${device}**: blufi_demo_${device}_merged.bin (${size} bytes)" >> firmware_summary.md
