@@ -38,14 +38,14 @@ static void led_blink_callback(void* arg)
     static bool led_state = false;
     if (led_blink_active) {
         led_state = !led_state;
-        gpio_set_level(CONNECTED_LED, led_state ? 0 : 1);  // 低电平有效，所以反转
+        gpio_set_level(CONNECTED_LED, led_state ? 0 : 1);
     }
 }
 
 static void led_off_callback(void* arg)
 {
     led_blink_active = false;
-    gpio_set_level(CONNECTED_LED, 1);  // 关闭LED（高电平）
+    gpio_set_level(CONNECTED_LED, CONNECTED_CLOSED_LED_LEVEL);  // 关闭LED
     if (led_blink_timer) {
         esp_timer_stop(led_blink_timer);
     }
@@ -55,7 +55,7 @@ static void led_init(void)
 {
     gpio_reset_pin(CONNECTED_LED);
     gpio_set_direction(CONNECTED_LED, GPIO_MODE_OUTPUT);
-    gpio_set_level(CONNECTED_LED, 1);  // 初始状态关闭（高电平）
+    gpio_set_level(CONNECTED_LED, CONNECTED_CLOSED_LED_LEVEL);  // 初始状态关闭
 }
 
 static void led_start_blink(void)
@@ -81,7 +81,7 @@ static void led_constant_on_then_off(void)
     }
     
     // 常亮
-    gpio_set_level(CONNECTED_LED, 0);  // 低电平有效，点亮LED
+    gpio_set_level(CONNECTED_LED, !CONNECTED_CLOSED_LED_LEVEL);  // 点亮LED
     
     // 创建10秒后关闭的定时器
     if (led_off_timer == NULL) {
