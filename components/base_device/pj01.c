@@ -21,8 +21,7 @@
 
 #include "cJSON.h"
 
-#include "nvs_flash.h"
-#include "nvs.h"
+
 
 #include "base_device.h"
 #include "device_common.h"
@@ -59,9 +58,7 @@ int device_properties_num = sizeof(device_properties) / sizeof(device_properties
 void init_gpio();
 void init_pwm();
 void init_property();
-void nvs_pj01_init(void);
-void nvs_pj01_read(void);
-void nvs_pj01_set(void);
+
 void update_pwm_duty(int duty);
 
 // 硬件初始化
@@ -69,9 +66,9 @@ void on_device_init()
 {
     init_gpio();
     init_pwm();
-    nvs_pj01_init();
+
     init_property();
-    nvs_pj01_read();
+    update_pwm_duty(1023);
 }
 
 // 创建任务
@@ -86,13 +83,14 @@ void on_set_property(char *property_name, cJSON *property_value, int msg_id)
     if (strcmp(property_name, "pwm_duty") == 0)
     {
         int duty = property_value->valueint;
-        if (duty >= 0 && duty <= 1023) {
+        if (duty >= 0 && duty <= 100) {
             pwm_duty_property.value.int_value = duty;
-            update_pwm_duty(duty);
-            nvs_pj01_set();
-            ESP_LOGI(TAG, "PWM duty set to: %d", duty);
+            // 映射：0->1023, 100->0
+            int actual_duty = 1023 - (duty * 1023 / 100);
+            update_pwm_duty(actual_duty);
+            ESP_LOGI(TAG, "PWM duty set to: %d (actual: %d)", duty, actual_duty);
         } else {
-            ESP_LOGE(TAG, "Invalid PWM duty value: %d (should be 0-1023)", duty);
+            ESP_LOGE(TAG, "Invalid PWM duty value: %d (should be 0-100)", duty);
         }
     }
 }
@@ -180,90 +178,13 @@ void init_property()
     strcpy(pwm_duty_property.name, "pwm_duty");
     pwm_duty_property.value_type = PROPERTY_TYPE_INT;
     pwm_duty_property.value.int_value = 0;
-    pwm_duty_property.max = 1023;  // 10位分辨率最大值
+    pwm_duty_property.max = 100;  // 幅度范围0-100
     pwm_duty_property.min = 0;
 }
 
-// NVS初始化
-void nvs_pj01_init(void)
-{
-    esp_err_t err = nvs_flash_init();
-    if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND)
-    {
-        ESP_ERROR_CHECK(nvs_flash_erase());
-        err = nvs_flash_init();
-    }
-    ESP_ERROR_CHECK(err);
-    ESP_LOGI(TAG, "NVS initialized");
-}
 
-// 从NVS读取配置
-void nvs_pj01_read(void)
-{
-    nvs_handle_t my_handle;
-    esp_err_t err = nvs_open("pj01_storage", NVS_READWRITE, &my_handle);
-    if (err != ESP_OK)
-    {
-        ESP_LOGE(TAG, "Error (%s) opening NVS handle!", esp_err_to_name(err));
-    }
-    else
-    {
-        ESP_LOGI(TAG, "NVS handle opened successfully");
-        
-        // 读取PWM占空比
-        int32_t pwm_duty = 0; // 默认值
-        err = nvs_get_i32(my_handle, "pwm_duty", &pwm_duty);
-        switch (err)
-        {
-        case ESP_OK:
-            ESP_LOGI(TAG, "Read PWM duty from NVS: %d", (int)pwm_duty);
-            pwm_duty_property.value.int_value = pwm_duty;
-            update_pwm_duty(pwm_duty);
-            break;
-        case ESP_ERR_NVS_NOT_FOUND:
-            ESP_LOGI(TAG, "PWM duty not found in NVS, using default: 0");
-            break;
-        default:
-            ESP_LOGE(TAG, "Error (%s) reading PWM duty!", esp_err_to_name(err));
-        }
-        
-        nvs_close(my_handle);
-    }
-}
 
-// 保存配置到NVS
-void nvs_pj01_set(void)
+void on_device_before_sleep(void)
 {
-    nvs_handle_t my_handle;
-    esp_err_t err = nvs_open("pj01_storage", NVS_READWRITE, &my_handle);
-    if (err != ESP_OK)
-    {
-        ESP_LOGE(TAG, "Error (%s) opening NVS handle!", esp_err_to_name(err));
-    }
-    else
-    {
-        ESP_LOGI(TAG, "Writing PWM duty to NVS: %d", pwm_duty_property.value.int_value);
-        err = nvs_set_i32(my_handle, "pwm_duty", pwm_duty_property.value.int_value);
-        if (err != ESP_OK)
-        {
-            ESP_LOGE(TAG, "Error (%s) writing PWM duty!", esp_err_to_name(err));
-        }
-        else
-        {
-            ESP_LOGI(TAG, "PWM duty written successfully");
-        }
-        
-        ESP_LOGI(TAG, "Committing updates in NVS...");
-        err = nvs_commit(my_handle);
-        if (err != ESP_OK)
-        {
-            ESP_LOGE(TAG, "Error (%s) committing NVS!", esp_err_to_name(err));
-        }
-        else
-        {
-            ESP_LOGI(TAG, "NVS commit successful");
-        }
-        
-        nvs_close(my_handle);
-    }
+    // PJ01 device has no special cleanup before sleep
 }
