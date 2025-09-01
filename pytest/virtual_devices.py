@@ -338,6 +338,82 @@ class DianjiDevice(BaseVirtualDevice):
                 self.logger.error(f"Error in voltage control: {e}")
 
 
+class PJ01Device(BaseVirtualDevice):
+    """PJ01 PWM电机控制设备"""
+    
+    def __init__(self, device_id: str, **kwargs):
+        super().__init__(device_id, "PJ01", **kwargs)
+        
+        # PJ01设备特有属性
+        self.properties.update({
+            "pwm_duty": {"value": 0, "readable": True, "writeable": True},  # PWM占空比 (0-1023)
+        })
+        
+        # 移除电池属性，因为PJ01设备没有电池
+        if "battery" in self.properties:
+            del self.properties["battery"]
+        
+        # 内部状态
+        self.current_pwm_duty = 0
+        self.pwm_thread = None
+    
+    def _device_init(self):
+        """PJ01设备初始化"""
+        self.logger.info("PJ01 PWM motor control device initialized")
+        
+        # 启动PWM控制任务
+        self.pwm_thread = threading.Thread(target=self._pwm_control_task, daemon=True)
+        self.pwm_thread.start()
+    
+    def _on_property_changed(self, property_name: str, value: Any, msg_id: int):
+        """PJ01设备属性变化处理"""
+        if property_name == "pwm_duty":
+            if 0 <= value <= 1023:
+                self.current_pwm_duty = int(value)
+                self.logger.info(f"PWM duty set to {value} (motor speed: {value/1023*100:.1f}%)")
+            else:
+                self.logger.error(f"Invalid PWM duty value: {value} (should be 0-1023)")
+    
+    def _on_action(self, data: Dict[str, Any]):
+        """PJ01设备动作处理"""
+        method = data.get("method")
+        if method == "motor_control":
+            duty = data.get("duty", 0)
+            if 0 <= duty <= 1023:
+                self.properties["pwm_duty"]["value"] = duty
+                self.current_pwm_duty = duty
+                self.logger.info(f"Motor control action: PWM duty set to {duty}")
+            else:
+                self.logger.error(f"Invalid motor control duty: {duty}")
+    
+    def _pwm_control_task(self):
+        """PWM控制任务 - 模拟电机控制"""
+        while self.running:
+            try:
+                # 更新PWM占空比属性
+                self.properties["pwm_duty"]["value"] = self.current_pwm_duty
+                
+                # 模拟电机运行状态日志
+                if self.current_pwm_duty > 0:
+                    motor_speed_percent = self.current_pwm_duty / 1023 * 100
+                    if motor_speed_percent > 80:
+                        self.logger.debug(f"Motor running at high speed: {motor_speed_percent:.1f}%")
+                    elif motor_speed_percent > 30:
+                        self.logger.debug(f"Motor running at medium speed: {motor_speed_percent:.1f}%")
+                    else:
+                        self.logger.debug(f"Motor running at low speed: {motor_speed_percent:.1f}%")
+                
+                time.sleep(2)  # 每2秒更新一次
+                
+            except Exception as e:
+                self.logger.error(f"Error in PWM control: {e}")
+    
+    def _battery_simulation_task(self):
+        """重写电池模拟任务 - PJ01设备没有电池"""
+        # PJ01设备没有电池，所以不需要电池模拟
+        pass
+
+
 class ZidongsuoDevice(BaseVirtualDevice):
     """自动锁设备"""
     
@@ -581,8 +657,9 @@ if __name__ == "__main__":
         dianji = DianjiDevice("dianji001aab")
         zidongsuo = ZidongsuoDevice("zidongsuo001")
         qtz = QTZDevice("qtz001aabbcc")
-        
-        devices = [td01, dianji, zidongsuo, qtz]
+        pj01 = PJ01Device("pj01001aabbcc")
+
+        devices = [td01, dianji, zidongsuo, qtz, pj01]
         
         # 启动所有设备
         for device in devices:

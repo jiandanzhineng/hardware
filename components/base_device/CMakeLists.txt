@@ -16,6 +16,10 @@ if(CONFIG_DEVICE_ZIDONGSUO)
     list(APPEND srcs "zidongsuo.c")
 endif()
 
+if(CONFIG_DEVICE_PJ01)
+    list(APPEND srcs "pj01.c")
+endif()
+
 
 
 idf_component_register(SRCS "qtz.c" "${srcs}"

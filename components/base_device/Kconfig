@@ -29,7 +29,12 @@ menu "Device Selectionaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 		config DEVICE_ZIDONGSUO
 			bool "ZIDONGSUO"
 			help
-				help for option5   	
+				help for option5
+
+		config DEVICE_PJ01
+			bool "PJ01"
+			help
+				PJ01 PWM motor control device
 	endchoice
 
 endmenu

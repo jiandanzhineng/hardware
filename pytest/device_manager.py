@@ -9,7 +9,7 @@ import json
 import time
 import threading
 import argparse
-from virtual_devices import TD01Device, DianjiDevice, ZidongsuoDevice, QTZDevice, BaseVirtualDevice
+from virtual_devices import TD01Device, DianjiDevice, ZidongsuoDevice, QTZDevice, PJ01Device, BaseVirtualDevice
 import logging
 
 # 配置日志
@@ -24,7 +24,8 @@ class DeviceManager:
         'td01': TD01Device,
         'dianji': DianjiDevice,
         'zidongsuo': ZidongsuoDevice,
-        'qtz': QTZDevice
+        'qtz': QTZDevice,
+        'pj01': PJ01Device
     }
     
     def __init__(self):
@@ -233,7 +234,7 @@ def main():
     """主函数"""
     parser = argparse.ArgumentParser(description='Virtual Device Manager')
     parser.add_argument('--interactive', '-i', action='store_true', help='Start in interactive mode')
-    parser.add_argument('--type', '-t', choices=['td01', 'dianji', 'zidongsuo', 'qtz'], help='Device type')
+    parser.add_argument('--type', '-t', choices=['td01', 'dianji', 'zidongsuo', 'qtz', 'pj01'], help='Device type')
     parser.add_argument('--id', '-d', help='Device ID')
     parser.add_argument('--broker', '-b', default='localhost', help='MQTT broker address')
     parser.add_argument('--port', '-p', type=int, default=1883, help='MQTT broker port')

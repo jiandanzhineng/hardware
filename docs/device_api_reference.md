@@ -9,6 +9,7 @@
 - [DIANJI 电击设备](#dianji-电击设备)
 - [ZIDONGSUO 自动锁](#zidongsuo-自动锁)
 - [QTZ 激光测距传感器](#qtz-激光测距传感器)
+- [PJ01 PWM电机控制器](#pj01-pwm电机控制器)
 - [MQTT通信协议](#mqtt通信协议)
 - [错误代码](#错误代码)
 
@@ -308,6 +309,80 @@
   "value": 0
 }
 ```
+
+---
+
+## PJ01 PWM电机控制器
+
+**设备类型**: `PJ01`  
+**描述**: PWM电机控制器，支持精确的电机速度控制，无电池设计
+
+### 设备属性
+
+| 属性名 | 类型 | 读写权限 | 描述 | 默认值 | 范围 |
+|--------|------|----------|------|--------|----------|
+| `pwm_duty` | int | 读写 | PWM占空比 | 0 | 0-1023 |
+
+### 功能说明
+
+- **PWM控制**: 通过设置占空比(0-1023)精确控制电机转速
+- **GPIO控制**: 内置转向控制引脚(TURN_PIN)和LED指示引脚(LED_PIN)
+- **无电池设计**: 该设备不包含电池属性，适用于外部供电场景
+- **实时响应**: PWM占空比变化立即生效
+
+### 设备动作
+
+#### motor_control - 电机控制
+
+**描述**: 直接控制电机PWM占空比
+
+**参数**:
+- `duty` (int): PWM占空比值，范围0-1023
+
+**示例**:
+```json
+{
+    "method": "motor_control",
+    "duty": 512
+}
+```
+
+### 使用示例
+
+#### 设置PWM占空比
+```javascript
+// 设置PWM占空比为50% (512/1023)
+controller.setDeviceProperty('pj01001aabbcc', 'pwm_duty', 512);
+
+// 设置PWM占空比为100% (最大速度)
+controller.setDeviceProperty('pj01001aabbcc', 'pwm_duty', 1023);
+
+// 停止电机
+controller.setDeviceProperty('pj01001aabbcc', 'pwm_duty', 0);
+```
+
+#### 电机控制动作
+```javascript
+// 通过动作控制电机
+const motorCommand = {
+    method: 'motor_control',
+    duty: 768  // 75%速度
+};
+controller.client.publish('/drecv/pj01001aabbcc', JSON.stringify(motorCommand));
+```
+
+#### 读取当前PWM值
+```javascript
+// 获取当前PWM占空比
+controller.getDeviceProperty('pj01001aabbcc', 'pwm_duty');
+```
+
+### 注意事项
+
+1. **占空比范围**: PWM占空比必须在0-1023范围内，超出范围的值会被拒绝
+2. **电机保护**: 建议在长时间高速运行后适当降低速度，避免电机过热
+3. **无电池监控**: PJ01设备不包含电池属性，无需关注电池电量
+4. **GPIO状态**: 设备初始化时会自动设置TURN_PIN和LED_PIN为高电平
 
 ---
 
