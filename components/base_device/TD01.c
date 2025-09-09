@@ -108,7 +108,7 @@ void control_ledc(ledc_channel_t channel, uint32_t duty)
     if(duty<2)duty=0;
     else if(duty>254)duty = 8191;
     else{
-        duty = duty * 24+8*256;
+        duty = duty * 32;
     }
     duty = duty;
     ESP_ERROR_CHECK(ledc_set_duty(LEDC_MODE, channel, duty));
