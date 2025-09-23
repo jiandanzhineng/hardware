@@ -10,6 +10,7 @@
 #define DEVICE_QTZ 4
 #define DEVICE_ZIDONGSUO 5
 #define DEVICE_PJ01 6
+#define DEVICE_QIYA 7
 
 
 #ifdef CONFIG_DEVICE_TD01
@@ -43,6 +44,11 @@
     #define DEVICE_TYPE_NAME "PJ01"
     #define CONNECTED_LED GPIO_NUM_10
     #define CONNECTED_LED_HIGH_ENABLE
+#endif
+
+#ifdef CONFIG_DEVICE_QIYA
+    #define DEVICE_TYPE_INDEX DEVICE_QIYA
+    #define DEVICE_TYPE_NAME "QIYA"
 #endif
 
 #ifdef CONNECTED_LED_HIGH_ENABLE

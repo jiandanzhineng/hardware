@@ -462,6 +462,81 @@ class ZidongsuoDevice(BaseVirtualDevice):
                 self.logger.error(f"Error in button simulation: {e}")
 
 
+class QiyaDevice(BaseVirtualDevice):
+    """气压检测设备"""
+    
+    def __init__(self, device_id: str, **kwargs):
+        super().__init__(device_id, "QIYA", **kwargs)
+        
+        # 气压设备特有属性
+        self.properties.update({
+            "pressure": {"value": 1013.25, "readable": True, "writeable": False},
+            "temperature": {"value": 25.0, "readable": True, "writeable": False},
+            "report_interval": {"value": 5000, "readable": True, "writeable": True}
+        })
+        
+        # 内部状态
+        self.current_pressure = self.properties["pressure"]["value"]
+        self.current_temperature = self.properties["temperature"]["value"]
+        
+        # 任务线程
+        self.pressure_thread = None
+        
+    def _device_init(self):
+        """设备初始化"""
+        self.logger.info("Initializing QIYA pressure sensor device")
+        
+        # 启动气压数据模拟任务
+        self.pressure_thread = threading.Thread(target=self._pressure_simulation_task, daemon=True)
+        self.pressure_thread.start()
+        
+    def _on_property_changed(self, property_name: str, value: Any, msg_id: int):
+        """属性变化处理"""
+        if property_name == "report_interval":
+            self.logger.info(f"Report interval changed to {value}ms")
+            
+    def _on_action(self, data: Dict[str, Any]):
+        """动作处理"""
+        action = data.get("action")
+        if action == "calibrate":
+            self.logger.info("Calibrating pressure sensor")
+            # 模拟校准过程
+            self.current_pressure = 1013.25
+            self.properties["pressure"]["value"] = self.current_pressure
+            
+    def _pressure_simulation_task(self):
+        """气压数据模拟任务"""
+        while self.running:
+            try:
+                # 模拟气压变化 (1000-1030 hPa)
+                pressure_change = random.uniform(-2.0, 2.0)
+                self.current_pressure = max(1000.0, min(1030.0, self.current_pressure + pressure_change))
+                
+                # 模拟温度变化 (15-35°C)
+                temp_change = random.uniform(-1.0, 1.0)
+                self.current_temperature = max(15.0, min(35.0, self.current_temperature + temp_change))
+                
+                # 更新属性
+                self.properties["pressure"]["value"] = round(self.current_pressure, 2)
+                self.properties["temperature"]["value"] = round(self.current_temperature, 1)
+                
+                # 发布数据
+                report_data = {
+                    "properties": {
+                        "pressure": self.properties["pressure"]["value"],
+                        "temperature": self.properties["temperature"]["value"]
+                    }
+                }
+                self._publish_message(report_data)
+                
+                # 等待报告间隔
+                time.sleep(self.properties["report_interval"]["value"] / 1000.0)
+                
+            except Exception as e:
+                self.logger.error(f"Error in pressure simulation: {e}")
+                time.sleep(1)
+
+
 class QTZDevice(BaseVirtualDevice):
     """QTZ设备 - VL6180X激光距离传感器 + 双按钮"""
     
@@ -658,8 +733,9 @@ if __name__ == "__main__":
         zidongsuo = ZidongsuoDevice("zidongsuo001")
         qtz = QTZDevice("qtz001aabbcc")
         pj01 = PJ01Device("pj01001aabbcc")
+        qiya = QiyaDevice("qiya001aabbcc")
 
-        devices = [td01, dianji, zidongsuo, qtz, pj01]
+        devices = [td01, dianji, zidongsuo, qtz, pj01, qiya]
         
         # 启动所有设备
         for device in devices:

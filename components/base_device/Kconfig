@@ -35,6 +35,11 @@ menu "Device Selectionaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 			bool "PJ01"
 			help
 				PJ01 PWM motor control device
+
+		config DEVICE_QIYA
+			bool "QIYA"
+			help
+				Atmospheric pressure detection device
 	endchoice
 
 endmenu
