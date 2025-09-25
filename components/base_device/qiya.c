@@ -234,8 +234,6 @@ static void read_pressure_data(void)
         }
     } while (status != 0x01);
     
-    vTaskDelay(pdMS_TO_TICKS(50));
-    
     ret = read_continuous(0x06, sensor_data, 5);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to read sensor data: %s", esp_err_to_name(ret));
@@ -253,6 +251,8 @@ static void read_pressure_data(void)
 
 static void report_pressure_task(void)
 {
+    int32_t remaining_ms;
+    int32_t delay_ms;
     while (1) {
         read_pressure_data();
         
@@ -267,7 +267,21 @@ static void report_pressure_task(void)
         
         cJSON_AddStringToObject(root, "method", "update");
         mqtt_publish(root);
-        vTaskDelay(pdMS_TO_TICKS(report_interval_ms));
+        
+        // 分段延时，最多1秒生效延迟
+        if(report_interval_ms>1000){
+            remaining_ms = report_interval_ms;
+            while (remaining_ms > 0) {
+                delay_ms = remaining_ms > 1000 ? 1000 : remaining_ms;
+                if(report_interval_ms < remaining_ms){
+                    remaining_ms = report_interval_ms;
+                }
+                vTaskDelay(pdMS_TO_TICKS(delay_ms));
+                remaining_ms -= delay_ms;
+            }
+        }else{
+            vTaskDelay(pdMS_TO_TICKS(report_interval_ms));
+        }
     }
 }
 
