@@ -100,7 +100,7 @@ void device_first_ready(void)
 {
     ESP_LOGI(TAG, "device_first_ready");
     // start heartbeat task every 30 seconds
-    xTaskCreate(heartbeat_task, "heartbeat_task", 1024 * 2, NULL, 10, NULL);
+    xTaskCreate(heartbeat_task, "heartbeat_task", 1024 * 4, NULL, 10, NULL);
 
 #ifdef CONNECTED_LED
     led_constant_on_then_off();

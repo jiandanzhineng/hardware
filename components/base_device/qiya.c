@@ -6,6 +6,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "driver/i2c.h"
+#include <math.h>
 
 static const char *TAG = "QIYA";
 
@@ -244,6 +245,10 @@ static void read_pressure_data(void)
     calculate_press();
     
     ESP_LOGI(TAG, "Pressure: %.2f kPa, Temperature: %.2f °C", current_pressure, current_temperature);
+
+    // update properties
+    pressure_property.value.float_value = current_pressure;
+    temperature_property.value.float_value = current_temperature;
 }
 
 static void report_pressure_task(void)
@@ -252,14 +257,16 @@ static void report_pressure_task(void)
         read_pressure_data();
         
         cJSON *root = cJSON_CreateObject();
-        cJSON *properties = cJSON_CreateObject();
         
-        cJSON_AddNumberToObject(properties, "pressure", current_pressure);
-        cJSON_AddNumberToObject(properties, "temperature", current_temperature);
+        // 限制到4位小数
+        double pressure_rounded = round(current_pressure * 10000.0) / 10000.0;
+        double temperature_rounded = round(current_temperature * 10000.0) / 10000.0;
         
-        cJSON_AddItemToObject(root, "properties", properties);
+        cJSON_AddNumberToObject(root, "pressure", pressure_rounded);
+        cJSON_AddNumberToObject(root, "temperature", temperature_rounded);
+        
+        cJSON_AddStringToObject(root, "method", "update");
         mqtt_publish(root);
-        
         vTaskDelay(pdMS_TO_TICKS(report_interval_ms));
     }
 }

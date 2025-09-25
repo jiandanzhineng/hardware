@@ -41,7 +41,7 @@ jobs:
         
         # 显示当前配置
         echo "Current device configuration:"
-        grep -E "CONFIG_DEVICE_(TD01|DIANJI|QTZ|ZIDONGSUO|PJ01)" sdkconfig || true
+        grep -E "CONFIG_DEVICE_(TD01|DIANJI|QTZ|ZIDONGSUO|PJ01|QIYA)" sdkconfig || true
 
     - name: ESP-IDF Build and Merge
       uses: espressif/esp-idf-ci-action@v1
@@ -90,6 +90,7 @@ jobs:
           firmware-files/firmware-QTZ/blufi_demo_QTZ_merged.bin
           firmware-files/firmware-ZIDONGSUO/blufi_demo_ZIDONGSUO_merged.bin
           firmware-files/firmware-PJ01/blufi_demo_PJ01_merged.bin
+          firmware-files/firmware-QIYA/blufi_demo_QIYA_merged.bin
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -99,7 +100,7 @@ jobs:
         echo "" >> firmware_summary.md
         echo "Built firmware for the following device types:" >> firmware_summary.md
         echo "" >> firmware_summary.md
-        for device in TD01 DIANJI QTZ ZIDONGSUO PJ01; do
+        for device in TD01 DIANJI QTZ ZIDONGSUO PJ01 QIYA; do
           if [ -f "firmware-files/firmware-${device}/blufi_demo_${device}_merged.bin" ]; then
             size=$(stat -c%s "firmware-files/firmware-${device}/blufi_demo_${device}_merged.bin" 2>/dev/null || echo "Unknown")
             echo "- **${device}**: blufi_demo_${device}_merged.bin (${size} bytes)" >> firmware_summary.md
