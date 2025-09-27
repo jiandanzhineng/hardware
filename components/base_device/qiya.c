@@ -21,7 +21,7 @@ static const char *TAG = "QIYA";
 
 device_property_t pressure_property;
 device_property_t temperature_property;
-device_property_t report_interval_property;
+device_property_t report_delay_ms_property;
 extern device_property_t device_type_property;
 extern device_property_t sleep_time_property;
 extern device_property_t battery_property;
@@ -30,7 +30,7 @@ device_property_t *device_properties[] = {
     &device_type_property,
     &pressure_property,
     &temperature_property,
-    &report_interval_property,
+    &report_delay_ms_property,
     &sleep_time_property,
     &battery_property,
 };
@@ -57,7 +57,7 @@ static void report_pressure_task(void);
 
 void on_set_property(char *property_name, cJSON *property_value, int msg_id)
 {
-    if (strcmp(property_name, "report_interval") == 0) {
+    if (strcmp(property_name, "report_delay_ms") == 0) {
         report_interval_ms = property_value->valueint;
     }
 }
@@ -302,11 +302,11 @@ void on_device_init(void)
     temperature_property.value_type = PROPERTY_TYPE_FLOAT;
     temperature_property.value.float_value = current_temperature;
     
-    report_interval_property.readable = true;
-    report_interval_property.writeable = true;
-    strcpy(report_interval_property.name, "report_interval");
-    report_interval_property.value_type = PROPERTY_TYPE_INT;
-    report_interval_property.value.int_value = report_interval_ms;
+    report_delay_ms_property.readable = true;
+    report_delay_ms_property.writeable = true;
+    strcpy(report_delay_ms_property.name, "report_delay_ms");
+    report_delay_ms_property.value_type = PROPERTY_TYPE_INT;
+    report_delay_ms_property.value.int_value = report_interval_ms;
     
     pressure_sensor_init();
     

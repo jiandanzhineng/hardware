@@ -390,96 +390,15 @@ controller.getDeviceProperty('pj01001aabbcc', 'pwm_duty');
 ## QIYA 气压检测设备
 
 **设备类型**: `QIYA`  
-**描述**: 大气压力检测设备，支持气压和温度测量
+**描述**: 气压检测设备，支持气压和温度测量
 
 ### 设备属性
 
 | 属性名 | 类型 | 读写权限 | 描述 | 默认值 | 范围 |
 |--------|------|----------|------|--------|----------|
-| `pressure` | float | 只读 | 大气压力值(hPa) | 1013.25 | 300-1100 |
+| `pressure` | float | 只读 | 气压值(kPa) | 0 | -40-40 |
 | `temperature` | float | 只读 | 环境温度(°C) | 25.0 | -40-85 |
-| `report_interval` | int | 读写 | 数据上报间隔(ms) | 5000 | 1000-60000 |
-
-### 功能说明
-
-- **气压测量**: 实时监测大气压力，精度可达0.01hPa
-- **温度补偿**: 内置温度传感器，提供温度补偿的精确气压值
-- **可配置上报**: 支持自定义数据上报间隔
-- **连续监测**: 设备持续运行，定期上报环境数据
-
-### 设备动作
-
-#### calibrate - 传感器校准
-
-**描述**: 校准气压传感器，将当前气压值重置为标准大气压
-
-**参数**: 无
-
-**示例**:
-```json
-{
-    "method": "calibrate"
-}
-```
-
-### 使用示例
-
-#### 设置数据上报间隔
-```javascript
-// 设置每3秒上报一次数据
-controller.setDeviceProperty('qiya001aabbcc', 'report_interval', 3000);
-
-// 设置每分钟上报一次数据
-controller.setDeviceProperty('qiya001aabbcc', 'report_interval', 60000);
-```
-
-#### 读取传感器数据
-```javascript
-// 获取当前气压值
-controller.getDeviceProperty('qiya001aabbcc', 'pressure');
-
-// 获取当前温度
-controller.getDeviceProperty('qiya001aabbcc', 'temperature');
-```
-
-#### 传感器校准
-```javascript
-// 校准气压传感器
-const calibrateCommand = {
-    method: 'calibrate'
-};
-controller.client.publish('/drecv/qiya001aabbcc', JSON.stringify(calibrateCommand));
-```
-
-#### 监听数据上报
-```javascript
-// 订阅设备数据上报
-controller.client.subscribe('/dpub/qiya001aabbcc');
-
-controller.client.on('message', (topic, message) => {
-    if (topic === '/dpub/qiya001aabbcc') {
-        const data = JSON.parse(message.toString());
-        if (data.properties) {
-            console.log('气压:', data.properties.pressure, 'hPa');
-            console.log('温度:', data.properties.temperature, '°C');
-        }
-    }
-});
-```
-
-### 数据解释
-
-#### 气压值说明
-- **标准大气压**: 1013.25 hPa (海平面标准值)
-- **高气压**: >1020 hPa (通常预示晴朗天气)
-- **低气压**: <1000 hPa (通常预示阴雨天气)
-
-### 注意事项
-
-1. **传感器预热**: 设备启动后需要约30秒预热时间，期间数据可能不稳定
-2. **温度影响**: 气压测量会受温度影响，设备已进行温度补偿
-3. **数据范围**: 超出测量范围的环境可能导致数据异常
-4. **上报间隔**: 过短的上报间隔可能影响设备功耗和网络负载
+| `report_delay_ms` | int | 读写 | 数据上报间隔(ms) | 5000 | 0-60000 |
 
 ---
 
