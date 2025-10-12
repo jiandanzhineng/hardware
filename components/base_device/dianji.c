@@ -128,6 +128,9 @@ float target_v = 0;
 // PWM频率
 int32_t pwm_f = 100;
 
+// PWM运行状态 (true=运行, false=暂停)
+bool pwm_running = true;
+
 // 当前实际电压
 float now_v = 0;
 
@@ -394,6 +397,7 @@ void init_pwm(void)
 {
     ledc_timer_config(&ledc_timer);
     ledc_channel_config(&ledc_channel);
+    pwm_running = true;  // PWM初始化后处于运行状态
     // ledc_stop(ledc_channel.speed_mode, ledc_channel.channel, 0);
 }
 
@@ -522,24 +526,38 @@ void pwm_output(void *arg)
 {
     while (1)
     {
-        target_v = voltage_property.value.int_value;
-        float error = target_v - now_v;
-        // 如果误差在死区范围内，则不做控制输出
-        if (fabs(error) > pid.dead_zone)
-        {
-            if (pwm_f >= 100 && pwm_f<=20000)
+        if(shock_property.value.int_value != 1){
+            // 不充电，暂停PWM定时器并设置GPIO为0
+            if(pwm_running){
+                ledc_timer_pause(ledc_channel.speed_mode, ledc_channel.timer_sel);
+                gpio_set_level(BOOST_PWM, 0);
+                pwm_f = 100;  // 保持最小频率
+                pwm_running = false;
+            }
+        }else{
+            // 重新开启PWM输出，恢复PWM定时器
+            if(!pwm_running){
+                ledc_timer_resume(ledc_channel.speed_mode, ledc_channel.timer_sel);
+                ledc_set_duty(ledc_channel.speed_mode, ledc_channel.channel, ledc_channel.duty);
+                ledc_update_duty(ledc_channel.speed_mode, ledc_channel.channel);
+                pwm_running = true;
+            }
+            
+            target_v = voltage_property.value.int_value;
+            float error = target_v - now_v;
+            // 如果误差在死区范围内，则不做控制输出
+            if (fabs(error) > pid.dead_zone)
             {
-                int32_t pid_output = pwm_f + PID_Compute(&pid, target_v, now_v);
-                if (pid_output >= 100 && pid_output<=20000)
+                if (pwm_f >= 100 && pwm_f<=20000)
                 {
-                    pwm_f = pid_output;
-                    ledc_set_freq(ledc_channel.speed_mode, ledc_channel.channel, pwm_f);
+                    int32_t pid_output = pwm_f + PID_Compute(&pid, target_v, now_v);
+                    if (pid_output >= 100 && pid_output<=20000)
+                    {
+                        pwm_f = pid_output;
+                        ledc_set_freq(ledc_channel.speed_mode, ledc_channel.channel, pwm_f);
+                    }
                 }
             }
-        }
-        if (shock_property.value.int_value != 1)
-        {
-            vTaskDelay(pdMS_TO_TICKS(100));
         }
         vTaskDelay(pdMS_TO_TICKS(40));
     }
@@ -548,14 +566,78 @@ void pwm_output(void *arg)
 
 
 
+// 放电状态枚举
+typedef enum {
+    DISCHARGE_IDLE = 0,      // 空闲状态
+    DISCHARGE_FORWARD,       // 正向放电150us
+    DISCHARGE_PAUSE,         // 暂停150us
+    DISCHARGE_REVERSE,       // 逆向放电150us
+    DISCHARGE_COMPLETE       // 完成一个周期
+} discharge_state_t;
+
+// 放电状态变量
+static discharge_state_t discharge_state = DISCHARGE_IDLE;
+static bool discharge_active = false;
+
 // 创建定时器
 esp_timer_handle_t timer;
-// 定时器回调函数
+// 定时器回调函数 - 状态机控制放电时序
 void timer_callback(void* arg)
 {
+    if (!discharge_active) {
+        esp_timer_stop(timer);
+        return;
+    }
+
+    switch (discharge_state) {
+        case DISCHARGE_FORWARD:
+            // 正向放电150us完成，进入暂停状态
+            gpio_set_level(O1, 0);
+            gpio_set_level(O2, 0);
+            discharge_state = DISCHARGE_PAUSE;
+            esp_timer_start_once(timer, 150);  // 暂停150us
+            break;
+            
+        case DISCHARGE_PAUSE:
+            // 暂停150us完成，开始逆向放电
+            gpio_set_level(O1, 1);
+            gpio_set_level(O2, 0);
+            discharge_state = DISCHARGE_REVERSE;
+            esp_timer_start_once(timer, 150);  // 逆向放电150us
+            break;
+            
+        case DISCHARGE_REVERSE:
+            // 逆向放电150us完成，关闭输出
+            gpio_set_level(O1, 0);
+            gpio_set_level(O2, 0);
+            discharge_state = DISCHARGE_COMPLETE;
+            discharge_active = false;
+            esp_timer_stop(timer);
+            break;
+            
+        default:
+            discharge_active = false;
+            esp_timer_stop(timer);
+            break;
+    }
+}
+
+// 启动放电序列
+void start_discharge_sequence(void)
+{
+    if (discharge_active) {
+        return;  // 如果已经在放电，不重复启动
+    }
+    
+    discharge_active = true;
+    discharge_state = DISCHARGE_FORWARD;
+    
+    // 开始正向放电
     gpio_set_level(O1, 0);
-    gpio_set_level(O2, 0);
-    esp_timer_stop(timer);
+    gpio_set_level(O2, 1);
+    
+    // 启动150us定时器
+    esp_timer_start_once(timer, 150);
 }
 
 void init_timer()
@@ -563,45 +645,27 @@ void init_timer()
     // 创建一个esp_timer_create_args_t结构体，设置定时器参数
     esp_timer_create_args_t timer_args = {
         .callback = timer_callback,                 // 设置回调函数
-        .name = "my_timer",                          // 设置定时器名称
+        .name = "discharge_timer",                   // 设置定时器名称
         .dispatch_method = ESP_TIMER_TASK,           // 从任务中调用回调函数
         .skip_unhandled_events = false               // 不跳过未处理的事件
     };
 
-    
     esp_timer_create(&timer_args, &timer);
-
-    // 启动定时器，每毫秒触发一次
-    // 1000微秒
-    // esp_timer_start_periodic(timer, 1000); 
 }
 
 
 // 放电
 void output(void *arg)
 {
-    uint8_t first_flag = 0;
     while (1)
     {
-        if (shock_property.value.int_value==1)
+        if (shock_property.value.int_value == 1)
         {
-            if (first_flag == 0)
-            {
-                // 放电
-                gpio_set_level(O1, 0);
-                gpio_set_level(O2, 1);
-                // 放电1ms
-                esp_timer_start_periodic(timer, 2000); 
-                first_flag = 1;
-            }
-            else
-            {
-                gpio_set_level(O1, 1);
-                gpio_set_level(O2, 0);
-                esp_timer_start_periodic(timer, 2000); 
-                first_flag = 0;
-            }
+            // 启动放电序列：正向150us → 暂停150us → 逆向150us
+            start_discharge_sequence();
         }
+        
+        // 延时，不阻塞主进程
         vTaskDelay(pdMS_TO_TICKS(delay_property.value.int_value));
     }
 }
