@@ -65,11 +65,6 @@ device_property_t *device_properties[] = {
 
 int device_properties_num = sizeof(device_properties) / sizeof(device_properties[0]);
 
-
-// 板载LED指示灯引脚
-#define BZ_LED1 12
-#define BZ_LED2 13
-
 // 通过两个输出引脚控制放电
 #define O1 3
 #define O2 19
@@ -422,8 +417,6 @@ void init_gpio()
     gpio_reset_pin(O1);
     gpio_reset_pin(O2);
     gpio_reset_pin(BOOST_PWM);
-    gpio_reset_pin(BZ_LED1);
-    gpio_reset_pin(BZ_LED2);
     gpio_reset_pin(BAT_ADC_EN);
     gpio_reset_pin(BOOST_ADC);
     gpio_reset_pin(BAT_ADC);
@@ -431,14 +424,10 @@ void init_gpio()
     gpio_set_direction(O1, GPIO_MODE_OUTPUT);
     gpio_set_direction(O2, GPIO_MODE_OUTPUT);
     gpio_set_direction(BOOST_PWM, GPIO_MODE_OUTPUT);
-    gpio_set_direction(BZ_LED1, GPIO_MODE_OUTPUT);
-    gpio_set_direction(BZ_LED2, GPIO_MODE_OUTPUT);
     gpio_set_direction(BAT_ADC_EN, GPIO_MODE_OUTPUT);
 
     gpio_set_level(O1, 0);
     gpio_set_level(O2, 0);
-    gpio_set_level(BZ_LED1, 0);
-    gpio_set_level(BZ_LED2, 0);
     gpio_set_level(BAT_ADC_EN, 1);
 }
 
