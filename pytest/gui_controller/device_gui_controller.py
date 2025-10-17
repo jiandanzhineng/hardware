@@ -249,7 +249,12 @@ class DeviceGUIController:
         
         # 为每个属性创建控制组件
         row = 0
+        # 需要在GUI中隐藏的属性
+        hidden_props = {"device_type", "sleep_time"}
         for prop_name, prop_info in device.properties.items():
+            # 跳过隐藏属性
+            if prop_name in hidden_props:
+                continue
             if prop_info["readable"]:
                 # 属性标签
                 ttk.Label(props_frame, text=f"{prop_name}:").grid(row=row, column=0, sticky="w", padx=3, pady=1)
@@ -263,7 +268,7 @@ class DeviceGUIController:
                 
                 # 如果属性可写，添加控制组件
                 if prop_info["writeable"]:
-                    if prop_name in ["power", "voltage", "delay", "low_band", "high_band", "report_delay_ms", "sleep_time", "report_interval"]:
+                    if prop_name in ["power", "voltage", "delay", "low_band", "high_band", "report_delay_ms", "sleep_time", "report_interval", "pressure"]:
                         # 数值输入
                         entry = ttk.Entry(props_frame, width=8)
                         entry.grid(row=row, column=2, padx=3, pady=1)
@@ -306,10 +311,7 @@ class DeviceGUIController:
             distance_entry.pack(side=tk.LEFT, padx=1)
             ttk.Button(distance_frame, text="设置", 
                       command=lambda: self.set_distance(device_id, distance_entry.get())).pack(side=tk.LEFT, padx=1)
-        
-        elif device.device_type == "QIYA":
-            ttk.Button(actions_frame, text="校准传感器", 
-                      command=lambda: self.send_action(device_id, "calibrate")).pack(side=tk.LEFT, padx=3)
+
     
     def start_device(self, device_id: str):
         """启动设备"""
@@ -414,6 +416,8 @@ class DeviceGUIController:
                 # 类型转换
                 if prop_name in ["power", "voltage", "delay", "low_band", "high_band", "report_delay_ms", "sleep_time"]:
                     value = int(float(value))
+                elif prop_name in ["pressure"]:
+                    value = float(value)
                 
                 # 更新设备属性
                 device = self.devices[device_id]
@@ -566,42 +570,15 @@ class DeviceGUIController:
         """关闭应用时的清理工作"""
         logging.info("[GUI] 开始关闭应用...")
         
-        # 设置停止标志
-        self.running = False
-        
+        # 强制关闭窗口
         try:
-            return
-            # 停止所有设备
-            logging.info("[GUI] 正在停止所有设备...")
-            t0 = time.perf_counter()
-            self.stop_all_devices()
-            logging.info(f"[GUI] 停止所有设备完成，用时 {time.perf_counter()-t0:.3f}s")
-            
-            # 等待更新线程结束
-            if self.update_thread and self.update_thread.is_alive():
-                logging.info("[GUI] 等待更新线程结束 (≤2s)...")
-                t1 = time.perf_counter()
-                self.update_thread.join(timeout=2)
-                if self.update_thread.is_alive():
-                    logging.warning(f"[GUI] 更新线程未能在超时内结束 (等待 {time.perf_counter()-t1:.3f}s)")
-                else:
-                    logging.info(f"[GUI] 更新线程结束，用时 {time.perf_counter()-t1:.3f}s")
-            
-            logging.info("[GUI] 应用关闭准备完成，开始销毁窗口")
-            
+            logging.info("[GUI] 调用 root.quit() ...")
+            self.root.quit()
+            logging.info("[GUI] 调用 root.destroy() ...")
+            self.root.destroy()
+            logging.info("[GUI] 窗口销毁完成")
         except Exception as e:
-            logging.error(f"[GUI] 关闭应用时发生错误: {e}")
-        
-        finally:
-            # 强制关闭窗口
-            try:
-                logging.info("[GUI] 调用 root.quit() ...")
-                self.root.quit()
-                logging.info("[GUI] 调用 root.destroy() ...")
-                self.root.destroy()
-                logging.info("[GUI] 窗口销毁完成")
-            except:
-                pass
+            logging.error(f"[GUI] 窗口销毁失败: {str(e)}")
 
 
 class GUILogHandler(logging.Handler):

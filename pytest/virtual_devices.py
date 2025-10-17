@@ -470,9 +470,9 @@ class QiyaDevice(BaseVirtualDevice):
         
         # 气压设备特有属性
         self.properties.update({
-            "pressure": {"value": 1013.25, "readable": True, "writeable": False},
+            "pressure": {"value": 22.0, "readable": True, "writeable": True},
             "temperature": {"value": 25.0, "readable": True, "writeable": False},
-            "report_interval": {"value": 5000, "readable": True, "writeable": True}
+            "report_delay_ms": {"value": 5000, "readable": True, "writeable": True}
         })
         
         # 内部状态
@@ -492,25 +492,28 @@ class QiyaDevice(BaseVirtualDevice):
         
     def _on_property_changed(self, property_name: str, value: Any, msg_id: int):
         """属性变化处理"""
-        if property_name == "report_interval":
-            self.logger.info(f"Report interval changed to {value}ms")
-            
+        if property_name == "report_delay_ms":
+            self.logger.info(f"Report delay set to {value}ms")
+        elif property_name == "pressure":
+            try:
+                self.current_pressure = float(value)
+                self.logger.info(f"Pressure set to {self.current_pressure} hPa")
+            except Exception:
+                # 保底，防止无效输入导致异常
+                self.logger.warning(f"Invalid pressure value: {value}")
+                
     def _on_action(self, data: Dict[str, Any]):
         """动作处理"""
-        action = data.get("action")
-        if action == "calibrate":
-            self.logger.info("Calibrating pressure sensor")
-            # 模拟校准过程
-            self.current_pressure = 1013.25
-            self.properties["pressure"]["value"] = self.current_pressure
+        # QIYA设备不再支持校准动作
+        pass
             
     def _pressure_simulation_task(self):
         """气压数据模拟任务"""
         while self.running:
             try:
                 # 模拟气压变化 (1000-1030 hPa)
-                pressure_change = random.uniform(-2.0, 2.0)
-                self.current_pressure = max(1000.0, min(1030.0, self.current_pressure + pressure_change))
+                pressure_change = random.uniform(-2.0, 2.0) * 0.1
+                self.current_pressure = max(20.0, min(24.0, self.current_pressure + pressure_change))
                 
                 # 模拟温度变化 (15-35°C)
                 temp_change = random.uniform(-1.0, 1.0)
@@ -522,15 +525,24 @@ class QiyaDevice(BaseVirtualDevice):
                 
                 # 发布数据
                 report_data = {
-                    "properties": {
-                        "pressure": self.properties["pressure"]["value"],
-                        "temperature": self.properties["temperature"]["value"]
-                    }
+                    "method":"update" ,
+                    "pressure": self.properties["pressure"]["value"],
+                    "temperature": self.properties["temperature"]["value"]
+                    
                 }
                 self._publish_message(report_data)
                 
-                # 等待报告间隔
-                time.sleep(self.properties["report_interval"]["value"] / 1000.0)
+                interval_s = float(self.properties["report_delay_ms"]["value"]) / 1000.0
+                elapsed = 0.0
+                step = 0.1
+                while self.running:
+                    current = float(self.properties["report_delay_ms"]["value"]) / 1000.0
+                    if elapsed >= current:
+                        break
+                    sleep_sec = step if (current - elapsed) > step else (current - elapsed)
+                    if sleep_sec > 0:
+                        time.sleep(sleep_sec)
+                        elapsed += sleep_sec
                 
             except Exception as e:
                 self.logger.error(f"Error in pressure simulation: {e}")
