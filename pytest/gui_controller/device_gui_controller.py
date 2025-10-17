@@ -20,7 +20,7 @@ parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
-from virtual_devices import TD01Device, DianjiDevice, ZidongsuoDevice, QTZDevice, BaseVirtualDevice
+from virtual_devices import TD01Device, DianjiDevice, ZidongsuoDevice, QTZDevice, QiyaDevice, BaseVirtualDevice
 
 class DeviceGUIController:
     """设备GUI控制器主类"""
@@ -78,6 +78,8 @@ class DeviceGUIController:
                   command=lambda: self.create_device("ZIDONGSUO")).pack(side=tk.LEFT, padx=5)
         ttk.Button(control_frame, text="创建QTZ设备", 
                   command=lambda: self.create_device("QTZ")).pack(side=tk.LEFT, padx=5)
+        ttk.Button(control_frame, text="创建气压传感器", 
+                  command=lambda: self.create_device("QIYA")).pack(side=tk.LEFT, padx=5)
         
         # 分隔符
         ttk.Separator(control_frame, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=10)
@@ -149,7 +151,7 @@ class DeviceGUIController:
     
     def auto_create_devices(self):
         """自动创建并启动所有设备类型"""
-        device_types = ["TD01", "DIANJI", "ZIDONGSUO", "QTZ"]
+        device_types = ["TD01", "DIANJI", "ZIDONGSUO", "QTZ", "QIYA"]
         
         for device_type in device_types:
             try:
@@ -185,6 +187,8 @@ class DeviceGUIController:
                 device = ZidongsuoDevice(device_id)
             elif device_type == "QTZ":
                 device = QTZDevice(device_id)
+            elif device_type == "QIYA":
+                device = QiyaDevice(device_id)
             else:
                 messagebox.showerror("错误", f"未知设备类型: {device_type}")
                 return
@@ -259,7 +263,7 @@ class DeviceGUIController:
                 
                 # 如果属性可写，添加控制组件
                 if prop_info["writeable"]:
-                    if prop_name in ["power", "voltage", "delay", "low_band", "high_band", "report_delay_ms", "sleep_time"]:
+                    if prop_name in ["power", "voltage", "delay", "low_band", "high_band", "report_delay_ms", "sleep_time", "report_interval"]:
                         # 数值输入
                         entry = ttk.Entry(props_frame, width=8)
                         entry.grid(row=row, column=2, padx=3, pady=1)
@@ -302,6 +306,10 @@ class DeviceGUIController:
             distance_entry.pack(side=tk.LEFT, padx=1)
             ttk.Button(distance_frame, text="设置", 
                       command=lambda: self.set_distance(device_id, distance_entry.get())).pack(side=tk.LEFT, padx=1)
+        
+        elif device.device_type == "QIYA":
+            ttk.Button(actions_frame, text="校准传感器", 
+                      command=lambda: self.send_action(device_id, "calibrate")).pack(side=tk.LEFT, padx=3)
     
     def start_device(self, device_id: str):
         """启动设备"""
@@ -369,31 +377,35 @@ class DeviceGUIController:
         
         for device_id in device_ids:
             try:
-                logging.info(f"正在停止设备 {device_id}...")
+                logging.info(f"[GUI] 正在停止设备 {device_id} ...")
                 if device_id in self.devices:
                     # 使用线程停止设备，避免阻塞
                     def stop_device_with_timeout(dev_id):
                         try:
                             self.devices[dev_id].stop()
-                            logging.info(f"设备 {dev_id} 已停止")
+                            logging.info(f"[GUI] 设备 {dev_id} stop() 返回")
                         except Exception as e:
-                            logging.error(f"停止设备 {dev_id} 时发生错误: {e}")
+                            logging.error(f"[GUI] 停止设备 {dev_id} 时发生错误: {e}")
                     
                     stop_thread = threading.Thread(target=stop_device_with_timeout, args=(device_id,), daemon=True)
+                    t0 = time.perf_counter()
+                    logging.info(f"[GUI] 创建停止线程并等待 (≤2s): {device_id}")
                     stop_thread.start()
                     stop_thread.join(timeout=2)  # 2秒超时
                     
                     if stop_thread.is_alive():
-                        logging.warning(f"设备 {device_id} 停止超时")
+                        logging.warning(f"[GUI] 设备 {device_id} 停止超时 (等待 {time.perf_counter()-t0:.3f}s)")
+                    else:
+                        logging.info(f"[GUI] 设备 {device_id} 停止完成，用时 {time.perf_counter()-t0:.3f}s")
                     
                     # 更新GUI状态
                     if device_id in self.property_widgets and 'status_label' in self.property_widgets[device_id]:
                         self.property_widgets[device_id]['status_label'].config(text="状态: 已停止", foreground="red")
                         
             except Exception as e:
-                logging.error(f"停止设备 {device_id} 失败: {e}")
+                logging.error(f"[GUI] 停止设备 {device_id} 失败: {e}")
         
-        logging.info("所有设备停止操作完成")
+        logging.info("[GUI] 所有设备停止操作完成")
     
     def set_property(self, device_id: str, prop_name: str, value: str):
         """设置设备属性"""
@@ -552,33 +564,42 @@ class DeviceGUIController:
     
     def on_closing(self):
         """关闭应用时的清理工作"""
-        logging.info("开始关闭应用...")
+        logging.info("[GUI] 开始关闭应用...")
         
         # 设置停止标志
         self.running = False
         
         try:
+            return
             # 停止所有设备
-            logging.info("正在停止所有设备...")
+            logging.info("[GUI] 正在停止所有设备...")
+            t0 = time.perf_counter()
             self.stop_all_devices()
+            logging.info(f"[GUI] 停止所有设备完成，用时 {time.perf_counter()-t0:.3f}s")
             
             # 等待更新线程结束
             if self.update_thread and self.update_thread.is_alive():
-                logging.info("等待更新线程结束...")
+                logging.info("[GUI] 等待更新线程结束 (≤2s)...")
+                t1 = time.perf_counter()
                 self.update_thread.join(timeout=2)
                 if self.update_thread.is_alive():
-                    logging.warning("更新线程未能在超时时间内结束")
+                    logging.warning(f"[GUI] 更新线程未能在超时内结束 (等待 {time.perf_counter()-t1:.3f}s)")
+                else:
+                    logging.info(f"[GUI] 更新线程结束，用时 {time.perf_counter()-t1:.3f}s")
             
-            logging.info("应用关闭完成")
+            logging.info("[GUI] 应用关闭准备完成，开始销毁窗口")
             
         except Exception as e:
-            logging.error(f"关闭应用时发生错误: {e}")
+            logging.error(f"[GUI] 关闭应用时发生错误: {e}")
         
         finally:
             # 强制关闭窗口
             try:
+                logging.info("[GUI] 调用 root.quit() ...")
                 self.root.quit()
+                logging.info("[GUI] 调用 root.destroy() ...")
                 self.root.destroy()
+                logging.info("[GUI] 窗口销毁完成")
             except:
                 pass
 
