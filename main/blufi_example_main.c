@@ -128,6 +128,54 @@ static bool example_wifi_reconnect(void)
     return ret;
 }
 
+// Try default Wi-Fi 10s after boot if not connected
+static void default_wifi_attempt_task(void *arg)
+{
+    vTaskDelay(pdMS_TO_TICKS(10000));
+    EventBits_t bits = xEventGroupGetBits(wifi_event_group);
+
+    // If BLE is connected (provisioning ongoing), skip default attempt
+    if (ble_is_connected) {
+        BLUFI_INFO("BLE connected; skip default WiFi attempt\n");
+        vTaskDelete(NULL);
+        return;
+    }
+
+    // If already connected and/or got IP, skip
+    if (gl_sta_connected || (bits & CONNECTED_BIT)) {
+        vTaskDelete(NULL);
+        return;
+    }
+
+    // If currently connecting to some AP, skip to avoid interference
+    if (gl_sta_is_connecting) {
+        BLUFI_INFO("WiFi is connecting; skip default WiFi attempt\n");
+        vTaskDelete(NULL);
+        return;
+    }
+
+    // If user configuration already exists, skip
+    wifi_config_t cur;
+    memset(&cur, 0, sizeof(cur));
+    if (esp_wifi_get_config(WIFI_IF_STA, &cur) == ESP_OK && cur.sta.ssid[0] != '\0') {
+        BLUFI_INFO("User WiFi config exists; skip default WiFi attempt\n");
+        vTaskDelete(NULL);
+        return;
+    }
+
+    // Try default Wi-Fi
+    wifi_config_t cfg;
+    memset(&cfg, 0, sizeof(cfg));
+    strncpy((char *)cfg.sta.ssid, "easysmart", sizeof(cfg.sta.ssid) - 1);
+    strncpy((char *)cfg.sta.password, "11111111", sizeof(cfg.sta.password) - 1);
+    // Ensure default config is NOT persisted
+    ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
+    esp_wifi_set_config(WIFI_IF_STA, &cfg);
+    BLUFI_INFO("No WiFi after 10s, trying default SSID easysmart\n");
+    example_wifi_connect();
+    vTaskDelete(NULL);
+}
+
 static int softap_get_current_connection_number(void)
 {
     esp_err_t ret;
@@ -329,8 +377,20 @@ static void initialise_wifi(void)
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+    // Load existing STA config (do not apply default immediately)
+    wifi_config_t existing_cfg;
+    memset(&existing_cfg, 0, sizeof(existing_cfg));
+    if (esp_wifi_get_config(WIFI_IF_STA, &existing_cfg) == ESP_OK) {
+        memcpy(&sta_config, &existing_cfg, sizeof(wifi_config_t));
+    } else {
+        memset(&sta_config, 0, sizeof(sta_config));
+    }
     example_record_wifi_conn_info(EXAMPLE_INVALID_RSSI, EXAMPLE_INVALID_REASON);
     ESP_ERROR_CHECK(esp_wifi_start());
+
+    // After boot, if still not connected within 10s, try default Wi-Fi
+    extern void default_wifi_attempt_task(void *arg);
+    xTaskCreate(default_wifi_attempt_task, "default_wifi_attempt", 2048, NULL, 5, NULL);
 }
 
 static esp_blufi_callbacks_t example_callbacks = {
@@ -422,18 +482,21 @@ static void example_event_callback(esp_blufi_cb_event_t event, esp_blufi_cb_para
         /* TODO */
         break;
     case ESP_BLUFI_EVENT_RECV_STA_BSSID:
+        ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_FLASH));
         memcpy(sta_config.sta.bssid, param->sta_bssid.bssid, 6);
         sta_config.sta.bssid_set = 1;
         esp_wifi_set_config(WIFI_IF_STA, &sta_config);
         BLUFI_INFO("Recv STA BSSID %s\n", sta_config.sta.ssid);
         break;
     case ESP_BLUFI_EVENT_RECV_STA_SSID:
+        ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_FLASH));
         strncpy((char *)sta_config.sta.ssid, (char *)param->sta_ssid.ssid, param->sta_ssid.ssid_len);
         sta_config.sta.ssid[param->sta_ssid.ssid_len] = '\0';
         esp_wifi_set_config(WIFI_IF_STA, &sta_config);
         BLUFI_INFO("Recv STA SSID %s\n", sta_config.sta.ssid);
         break;
     case ESP_BLUFI_EVENT_RECV_STA_PASSWD:
+        ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_FLASH));
         strncpy((char *)sta_config.sta.password, (char *)param->sta_passwd.passwd, param->sta_passwd.passwd_len);
         sta_config.sta.password[param->sta_passwd.passwd_len] = '\0';
         esp_wifi_set_config(WIFI_IF_STA, &sta_config);
