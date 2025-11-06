@@ -128,52 +128,55 @@ static bool example_wifi_reconnect(void)
     return ret;
 }
 
-// Try default Wi-Fi 10s after boot if not connected
+// Try default Wi-Fi 8s after boot if not connected
 static void default_wifi_attempt_task(void *arg)
 {
-    vTaskDelay(pdMS_TO_TICKS(10000));
-    EventBits_t bits = xEventGroupGetBits(wifi_event_group);
+    vTaskDelay(pdMS_TO_TICKS(3000));
+    while(true){
+        vTaskDelay(pdMS_TO_TICKS(5000));
+        EventBits_t bits = xEventGroupGetBits(wifi_event_group);
 
-    // If BLE is connected (provisioning ongoing), skip default attempt
-    if (ble_is_connected) {
-        BLUFI_INFO("BLE connected; skip default WiFi attempt\n");
-        vTaskDelete(NULL);
-        return;
+        // If BLE is connected (provisioning ongoing), skip default attempt
+        if (ble_is_connected) {
+            BLUFI_INFO("BLE connected; skip default WiFi attempt\n");
+            vTaskDelete(NULL);
+            return;
+        }
+
+        // If already connected and/or got IP, skip
+        if (gl_sta_connected || (bits & CONNECTED_BIT)) {
+            vTaskDelete(NULL);
+            return;
+        }
+
+        // If currently connecting to some AP, continue to avoid interference
+        if (gl_sta_is_connecting) {
+            BLUFI_INFO("WiFi is connecting; skip current default WiFi attempt\n");
+            continue;
+        }
+
+        // If a non-default user configuration already exists, skip
+        wifi_config_t cur;
+        memset(&cur, 0, sizeof(cur));
+        if (esp_wifi_get_config(WIFI_IF_STA, &cur) == ESP_OK && cur.sta.ssid[0] != '\0') {
+            if (strcmp((char *)cur.sta.ssid, "easysmart") != 0 || strcmp((char *)cur.sta.password, "11111111") != 0) {
+                BLUFI_INFO("User WiFi config exists; skip default WiFi attempt\n");
+                vTaskDelete(NULL);
+                return;
+            }
+        }
+
+        // Try default Wi-Fi
+        wifi_config_t cfg;
+        memset(&cfg, 0, sizeof(cfg));
+        strncpy((char *)cfg.sta.ssid, "easysmart", sizeof(cfg.sta.ssid) - 1);
+        strncpy((char *)cfg.sta.password, "11111111", sizeof(cfg.sta.password) - 1);
+        // Ensure default config is NOT persisted
+        ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
+        esp_wifi_set_config(WIFI_IF_STA, &cfg);
+        BLUFI_INFO("No WiFi after 8s, trying default SSID easysmart\n");
+        example_wifi_connect();
     }
-
-    // If already connected and/or got IP, skip
-    if (gl_sta_connected || (bits & CONNECTED_BIT)) {
-        vTaskDelete(NULL);
-        return;
-    }
-
-    // If currently connecting to some AP, skip to avoid interference
-    if (gl_sta_is_connecting) {
-        BLUFI_INFO("WiFi is connecting; skip default WiFi attempt\n");
-        vTaskDelete(NULL);
-        return;
-    }
-
-    // If user configuration already exists, skip
-    wifi_config_t cur;
-    memset(&cur, 0, sizeof(cur));
-    if (esp_wifi_get_config(WIFI_IF_STA, &cur) == ESP_OK && cur.sta.ssid[0] != '\0') {
-        BLUFI_INFO("User WiFi config exists; skip default WiFi attempt\n");
-        vTaskDelete(NULL);
-        return;
-    }
-
-    // Try default Wi-Fi
-    wifi_config_t cfg;
-    memset(&cfg, 0, sizeof(cfg));
-    strncpy((char *)cfg.sta.ssid, "easysmart", sizeof(cfg.sta.ssid) - 1);
-    strncpy((char *)cfg.sta.password, "11111111", sizeof(cfg.sta.password) - 1);
-    // Ensure default config is NOT persisted
-    ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
-    esp_wifi_set_config(WIFI_IF_STA, &cfg);
-    BLUFI_INFO("No WiFi after 10s, trying default SSID easysmart\n");
-    example_wifi_connect();
-    vTaskDelete(NULL);
 }
 
 static int softap_get_current_connection_number(void)
