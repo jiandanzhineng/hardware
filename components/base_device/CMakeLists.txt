@@ -24,6 +24,9 @@ if(CONFIG_DEVICE_QIYA)
     list(APPEND srcs "qiya.c")
 endif()
 
+if(CONFIG_DEVICE_DZC01)
+    list(APPEND srcs "DZC01.c")
+endif()
 
 
 idf_component_register(SRCS "${srcs}"

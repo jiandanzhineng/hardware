@@ -337,7 +337,7 @@ void get_property(char *property_name, int msg_id)
 
     cJSON *root = cJSON_CreateObject();
     cJSON_AddStringToObject(root, "method", "update");
-    cJSON_AddNumberToObject(root, "msg_id", msg_id);
+    if(msg_id >= 0)cJSON_AddNumberToObject(root, "msg_id", msg_id);
     cJSON_AddStringToObject(root, "key", property->name);
     if (property->value_type == PROPERTY_TYPE_INT)
     {

@@ -11,6 +11,7 @@
 #define DEVICE_ZIDONGSUO 5
 #define DEVICE_PJ01 6
 #define DEVICE_QIYA 7
+#define DEVICE_DZC01 8
 
 
 #ifdef CONFIG_DEVICE_TD01
@@ -55,6 +56,11 @@
     #define DEVICE_TYPE_NAME "QIYA"
     #define CONNECTED_LED GPIO_NUM_10
 #endif
+
+#ifdef CONFIG_DEVICE_DZC01
+    #define DEVICE_TYPE_INDEX DEVICE_DZC01
+    #define DEVICE_TYPE_NAME "DZC01"
+#endif // 电子秤01
 
 #ifdef CONNECTED_LED_HIGH_ENABLE
     #define CONNECTED_CLOSED_LED_LEVEL 0

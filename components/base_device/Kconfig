@@ -40,6 +40,11 @@ menu "Device Selectionaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 			bool "QIYA"
 			help
 				Atmospheric pressure detection device
+
+		config DEVICE_DZC01
+			bool "DZC01"
+			help
+				Electronic scale device (HX711 + OLED)
 	endchoice
 
 endmenu
