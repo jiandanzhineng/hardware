@@ -155,8 +155,8 @@ class DeviceGUIController:
         
         for device_type in device_types:
             try:
-                # 创建设备
-                self.create_device(device_type)
+                # 创建设备（初始化阶段不立即启动，避免重复）
+                self.create_device(device_type, auto_start=False)
                 
                 # 获取刚创建的设备ID
                 device_ids = [d for d in self.devices.keys() if d.startswith(device_type.lower())]
@@ -171,7 +171,7 @@ class DeviceGUIController:
             except Exception as e:
                 logging.error(f"自动创建设备 {device_type} 失败: {str(e)}")
     
-    def create_device(self, device_type: str):
+    def create_device(self, device_type: str, auto_start: bool = True):
         """创建新设备"""
         # 生成设备ID
         device_count = len([d for d in self.devices.keys() if d.startswith(device_type.lower())])
@@ -198,6 +198,10 @@ class DeviceGUIController:
             
             # 创建设备控制界面
             self.create_device_frame(device_id, device)
+
+            # 新建设备后自动启动
+            if auto_start:
+                self.root.after(300, lambda did=device_id: self.start_device(did))
             
             logging.info(f"创建了新设备: {device_type} - {device_id}")
             

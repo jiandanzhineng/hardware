@@ -1,5 +1,6 @@
 #include "smqtt.h"
 #include "esp_system.h"
+#include "esp_bt.h"
 
 static const char *TAG = "SMQTT";
 esp_mqtt_client_handle_t smqtt_client;
@@ -88,6 +89,9 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         msg_id = esp_mqtt_client_subscribe(client, recv_topic, 0);
         ESP_LOGI(TAG, "sent subscribe successful, topic is %s, msg_id=%d", recv_topic, msg_id);
         device_first_ready();
+        if (esp_bt_controller_get_status() == ESP_BT_CONTROLLER_STATUS_ENABLED) {
+            esp_bt_controller_disable();
+        }
         break;
     case MQTT_EVENT_DISCONNECTED:
         ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");

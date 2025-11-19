@@ -242,7 +242,6 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
         break;
     case WIFI_EVENT_STA_CONNECTED:
         BLUFI_INFO("BLUFI WIFI_EVENT_STA_CONNECTED\n");
-        esp_bt_controller_disable();
         gl_sta_connected = true;
         gl_sta_is_connecting = false;
         event = (wifi_event_sta_connected_t *)event_data;

@@ -41,7 +41,7 @@ static const char *TAG = "pj01";
 #define LEDC_FREQUENCY          (1000) // 频率1000Hz
 
 // 设备属性定义
-device_property_t pwm_duty_property;
+device_property_t power_property;
 extern device_property_t device_type_property;
 extern device_property_t sleep_time_property;
 // 注意：PJ01设备没有电池，所以不包含battery_property
@@ -49,7 +49,7 @@ extern device_property_t sleep_time_property;
 device_property_t *device_properties[] = {
     &device_type_property,
     &sleep_time_property,
-    &pwm_duty_property,
+    &power_property,
 };
 
 int device_properties_num = sizeof(device_properties) / sizeof(device_properties[0]);
@@ -80,17 +80,23 @@ void on_device_first_ready()
 void on_set_property(char *property_name, cJSON *property_value, int msg_id)
 {
     ESP_LOGI(TAG, "on_set_property property_name:%s", property_name);
-    if (strcmp(property_name, "pwm_duty") == 0)
+    if (strcmp(property_name, "power") == 0)
     {
-        int duty = property_value->valueint;
-        if (duty >= 0 && duty <= 100) {
-            pwm_duty_property.value.int_value = duty;
-            // 映射：0->1023, 100->0
-            int actual_duty = 1023 - (duty * 1023 / 100);
+        int power = property_value->valueint;
+        if (power >= 0 && power <= 255) {
+            power_property.value.int_value = power;
+            int actual_duty;
+            if (power < 1) {
+                actual_duty = 1023;
+            } else if (power > 254) {
+                actual_duty = 0;
+            } else {
+                actual_duty = 1023 - power * 4;
+            }
             update_pwm_duty(actual_duty);
-            ESP_LOGI(TAG, "PWM duty set to: %d (actual: %d)", duty, actual_duty);
+            ESP_LOGI(TAG, "power set to: %d (duty: %d)", power, actual_duty);
         } else {
-            ESP_LOGE(TAG, "Invalid PWM duty value: %d (should be 0-100)", duty);
+            ESP_LOGE(TAG, "Invalid power value: %d (should be 0-255)", power);
         }
     }
 }
@@ -172,14 +178,13 @@ void init_property()
 {
     ESP_LOGI(TAG, "Initializing properties");
     
-    // 初始化PWM占空比属性
-    pwm_duty_property.readable = true;
-    pwm_duty_property.writeable = true;
-    strcpy(pwm_duty_property.name, "pwm_duty");
-    pwm_duty_property.value_type = PROPERTY_TYPE_INT;
-    pwm_duty_property.value.int_value = 0;
-    pwm_duty_property.max = 100;  // 幅度范围0-100
-    pwm_duty_property.min = 0;
+    power_property.readable = true;
+    power_property.writeable = true;
+    strcpy(power_property.name, "power");
+    power_property.value_type = PROPERTY_TYPE_INT;
+    power_property.value.int_value = 0;
+    power_property.max = 255;
+    power_property.min = 0;
 }
 
 
