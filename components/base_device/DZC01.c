@@ -63,28 +63,28 @@ extern void mqtt_publish(cJSON *root);
 static float hx_offset = 352703.0f;     // default from mpy demo
 static float hx_calval = 249201.5f;     // default from mpy demo (100g)
 static float hx_known_weight = 500.0f;  // grams for calval
-static inline void hx_delay_short(void) { ets_delay_us(2); }
+static inline void hx_delay_short(void) { ets_delay_us(5); }
 
 static void hx_init(void) {
     gpio_reset_pin(HX_SCK_GPIO);
     gpio_reset_pin(HX_DT_GPIO);
     gpio_set_direction(HX_SCK_GPIO, GPIO_MODE_OUTPUT);
     gpio_set_direction(HX_DT_GPIO, GPIO_MODE_INPUT);
+    gpio_pullup_en(HX_DT_GPIO);
     gpio_set_level(HX_SCK_GPIO, 0);
 }
 
 static inline int hx_is_ready(void) { return gpio_get_level(HX_DT_GPIO) == 0; }
 
 static int32_t hx_read_raw24(void) {
-    // wait ready
     while (!hx_is_ready()) { hx_delay_short(); }
     uint32_t data = 0;
+    gpio_set_level(HX_SCK_GPIO, 0); hx_delay_short();
     for (int i = 0; i < 24; i++) {
         gpio_set_level(HX_SCK_GPIO, 1); hx_delay_short();
-        data = (data << 1) | gpio_get_level(HX_DT_GPIO);
         gpio_set_level(HX_SCK_GPIO, 0); hx_delay_short();
+        data = (data << 1) | gpio_get_level(HX_DT_GPIO);
     }
-    // gain=128: 1 extra clock
     gpio_set_level(HX_SCK_GPIO, 1); hx_delay_short();
     gpio_set_level(HX_SCK_GPIO, 0); hx_delay_short();
     // convert two's complement 24-bit
@@ -99,14 +99,15 @@ static float hx_read_filtered(void) {
     int32_t maxv = INT32_MIN;
     int32_t minv = INT32_MAX;
     int64_t sum = 0;
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < 5; i++) {
         int32_t v = hx_read_raw24();
         if (v > maxv) maxv = v;
         if (v < minv) minv = v;
         sum += v;
     }
     sum -= maxv; sum -= minv;
-    float avg = (float)sum / 8.0f;
+    float avg = (float)sum / 3.0f;
+    ESP_LOGI(TAG, "HX711 raw: %d, filtered: %.2f", (int)avg, avg);
     return avg;
 }
 
@@ -349,26 +350,25 @@ static void oled_show_lines(const char *l1, const char *l2) {
     oled_draw_text_line(1, l2);
 }
 
-// Periodic task: update weight and optionally push update
-static void report_task(void *arg) {
+// Periodic tasks: weight (200ms), display (200ms), report (sliced wait)
+static void weight_task(void *arg) {
     while (1) {
-        int delay = report_delay_ms_property.value.int_value;
-        if (delay < 100) delay = 100;
-        if (delay > 5000) delay = 5000;
-
         float w = read_weight_grams();
         if (w < 0) w = 0;
         if (w > 5000.0f) w = 5000.0f;
-        weight_property.value.float_value = w;
+        int iw = (int)(w + 0.5f);
+        weight_property.value.int_value = iw;
+        vTaskDelay(pdMS_TO_TICKS(200));
+    }
+}
 
-        // lightweight single-property update
-        get_property("weight", 0);
-
-        // update OLED display
+static void display_task(void *arg) {
+    while (1) {
         if (display_on_property.value.int_value) {
             if (display_mode_property.value.int_value == 1) {
                 char l1[32];
-                snprintf(l1, sizeof(l1), "W %d g", (int)(w + 0.5f));
+                int w = weight_property.value.int_value;
+                snprintf(l1, sizeof(l1), "W %d g", w);
                 oled_show_lines(l1, "");
             } else if (display_mode_property.value.int_value == 2) {
                 const char *l1 = line1_text_property.value.string_value[0] ? line1_text_property.value.string_value : "Line1";
@@ -376,7 +376,28 @@ static void report_task(void *arg) {
                 oled_show_lines(l1, l2);
             }
         }
-        vTaskDelay(pdMS_TO_TICKS(delay));
+        vTaskDelay(pdMS_TO_TICKS(200));
+    }
+}
+
+static void report_task(void *arg) {
+    while (1) {
+        int delay = report_delay_ms_property.value.int_value;
+        if (delay < 100) delay = 100;
+        if (delay > 5000) delay = 5000;
+        int waited = 0;
+        while (1) {
+            int current = report_delay_ms_property.value.int_value;
+            if (current < 100) current = 100;
+            if (current > 5000) current = 5000;
+            delay = current;
+            if (waited >= delay) break;
+            int remain = delay - waited;
+            int slice = remain > 500 ? 500 : remain;
+            vTaskDelay(pdMS_TO_TICKS(slice));
+            waited += slice;
+        }
+        get_property("weight", 0);
     }
 }
 
@@ -462,8 +483,8 @@ void on_device_init(void) {
     weight_property.readable = true;
     weight_property.writeable = false;
     strcpy(weight_property.name, "weight");
-    weight_property.value_type = PROPERTY_TYPE_FLOAT;
-    weight_property.value.float_value = 0.0f;
+    weight_property.value_type = PROPERTY_TYPE_INT;
+    weight_property.value.int_value = 0;
 
     report_delay_ms_property.readable = true;
     report_delay_ms_property.writeable = true;
@@ -513,8 +534,9 @@ void on_device_init(void) {
     oled_show_lines("SCALE V1", "WAIT NET");
 
     init_keys();
-    // Start periodic reporting task
-    xTaskCreate(report_task, "dzc01_report_task", 4096, NULL, 10, NULL);
+    xTaskCreate(weight_task, "dzc01_weight_task", 4096, NULL, 10, NULL);
+    xTaskCreate(display_task, "dzc01_display_task", 4096, NULL, 9, NULL);
+    xTaskCreate(report_task, "dzc01_report_task", 4096, NULL, 8, NULL);
 }
 
 void on_device_first_ready(void) {
