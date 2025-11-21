@@ -10,6 +10,7 @@
 #include <string.h>
 #include "nvs_flash.h"
 #include "nvs.h"
+#include "esp_wifi.h"
 
 static const char *TAG = "DZC01";
 
@@ -181,6 +182,14 @@ static void hx_calibrate_500g(void) {
 
 // ---------------- SSD1306 minimal display ----------------
 static bool oled_ready = false;
+static bool net_ready = false;
+static int notify_ms_left = 0;
+static char notify_text[16] = "";
+
+static bool wifi_connected(void) {
+    wifi_ap_record_t ap;
+    return esp_wifi_sta_get_ap_info(&ap) == ESP_OK;
+}
 
 static esp_err_t oled_write_cmd(uint8_t cmd) {
     uint8_t buf[2] = {0x80, cmd};
@@ -334,6 +343,62 @@ static void oled_draw_char(int col, int page, char ch) {
     oled_write_data(colbuf, 8);
 }
 
+static void oled_draw_char_x2(int col, int page, char ch) {
+    if (!oled_ready) return;
+    uint8_t c = (uint8_t)ch;
+    const uint8_t *g = font8x8_basic[c];
+    uint8_t top[16];
+    uint8_t bottom[16];
+    for (int x = 0; x < 8; x++) {
+        uint16_t u = 0;
+        for (int y = 0; y < 8; y++) {
+            if ((g[y] >> (7 - x)) & 0x01) {
+                u |= (1 << (2 * y));
+                u |= (1 << (2 * y + 1));
+            }
+        }
+        top[2 * x] = (uint8_t)(u & 0xFF);
+        top[2 * x + 1] = (uint8_t)(u & 0xFF);
+        bottom[2 * x] = (uint8_t)(u >> 8);
+        bottom[2 * x + 1] = (uint8_t)(u >> 8);
+    }
+    oled_write_cmd(0x21); oled_write_cmd(col); oled_write_cmd(col + 15);
+    oled_write_cmd(0x22); oled_write_cmd(page); oled_write_cmd(page);
+    oled_write_data(top, 16);
+    oled_write_cmd(0x22); oled_write_cmd(page + 1); oled_write_cmd(page + 1);
+    oled_write_data(bottom, 16);
+}
+
+static void oled_draw_text_center_x2(int page, const char *text) {
+    if (!oled_ready || !text) return;
+    int len = 0; while (text[len] && len < 8) len++;
+    int col = (128 - len * 16) / 2; if (col < 0) col = 0;
+    for (int i = 0; i < len; i++) {
+        oled_draw_char_x2(col, page, text[i]);
+        col += 16;
+    }
+}
+
+static void oled_draw_text_x2_at(int page, int col, const char *text) {
+    if (!oled_ready || !text) return;
+    int len = 0; while (text[len] && len < 8) len++;
+    for (int i = 0; i < len; i++) {
+        oled_draw_char_x2(col, page, text[i]);
+        col += 16;
+        if (col > 112) break;
+    }
+}
+
+static void oled_draw_text_line_at(int page, int col, const char *text) {
+    if (!oled_ready || !text) return;
+    int c = col;
+    for (int i = 0; text[i] && i < 16; i++) {
+        if (c > 120) break;
+        oled_draw_char(c, page, text[i]);
+        c += 8;
+    }
+}
+
 static void oled_draw_text_line(int line, const char *text) {
     if (!oled_ready || !text) return;
     int page = line; if (page < 0) page = 0; if (page > 3) page = 3;
@@ -365,15 +430,32 @@ static void weight_task(void *arg) {
 static void display_task(void *arg) {
     while (1) {
         if (display_on_property.value.int_value) {
+            char net[16];
+            if (wifi_connected()) {
+                if (net_ready) strcpy(net, "NET OK"); else strcpy(net, "WIFI OK");
+            } else {
+                strcpy(net, "WIFI NO");
+            }
+            if (notify_ms_left > 0) { notify_ms_left -= 200; if (notify_ms_left < 0) notify_ms_left = 0; }
+            oled_clear();
             if (display_mode_property.value.int_value == 1) {
-                char l1[32];
+                char big[32];
                 int w = weight_property.value.int_value;
-                snprintf(l1, sizeof(l1), "W %d g", w);
-                oled_show_lines(l1, "");
+                snprintf(big, sizeof(big), "%d g", w);
+                oled_draw_text_x2_at(1, 0, big);
+                oled_draw_text_line_at(0, 64, net);
+                if (notify_ms_left > 0) oled_draw_text_line_at(1, 64, notify_text);
             } else if (display_mode_property.value.int_value == 2) {
                 const char *l1 = line1_text_property.value.string_value[0] ? line1_text_property.value.string_value : "Line1";
                 const char *l2 = line2_text_property.value.string_value[0] ? line2_text_property.value.string_value : "Line2";
-                oled_show_lines(l1, l2);
+                char big[32];
+                int w = weight_property.value.int_value;
+                snprintf(big, sizeof(big), "%d g", w);
+                oled_draw_text_x2_at(1, 0, big);
+                oled_draw_text_line_at(0, 64, l1);
+                oled_draw_text_line_at(1, 64, l2);
+                oled_draw_text_line_at(2, 64, net);
+                if (notify_ms_left > 0) oled_draw_text_line_at(3, 64, notify_text);
             }
         }
         vTaskDelay(pdMS_TO_TICKS(200));
@@ -402,8 +484,9 @@ static void report_task(void *arg) {
 }
 
 // wrappers for button callbacks
-static void key3_tare_cb(void *arg, void *usr_data) { (void)arg; (void)usr_data; hx_tare(); }
-static void key4_cal_cb(void *arg, void *usr_data) { (void)arg; (void)usr_data; hx_calibrate_500g(); }
+static void key3_tare_cb(void *arg, void *usr_data) { (void)arg; (void)usr_data; hx_tare(); strcpy(notify_text, "TARE OK"); notify_ms_left = 3000; }
+static void key4_cal_cb(void *arg, void *usr_data) { (void)arg; (void)usr_data; hx_calibrate_500g(); strcpy(notify_text, "CALIB OK"); notify_ms_left = 3000; }
+
 
 // Key2: send key_clicked action
 static void key2_click_cb(void *arg, void *usr_data) {
@@ -531,7 +614,6 @@ void on_device_init(void) {
     oled_init();
     oled_power(true);
     oled_contrast(display_contrast_property.value.int_value);
-    oled_show_lines("SCALE V1", "WAIT NET");
 
     init_keys();
     xTaskCreate(weight_task, "dzc01_weight_task", 4096, NULL, 10, NULL);
@@ -540,10 +622,9 @@ void on_device_init(void) {
 }
 
 void on_device_first_ready(void) {
-    // Show network success
     strcpy(line1_text_property.value.string_value, "Connected");
     get_property("line1_text", 0);
-    oled_show_lines("NET OK", "");
+    net_ready = true;
 }
 
 void on_mqtt_msg_process(char *topic, cJSON *root) {
