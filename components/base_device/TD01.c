@@ -104,16 +104,19 @@ void on_action(cJSON *root){
 void control_ledc(ledc_channel_t channel, uint32_t duty)
 {
     ESP_LOGI(TAG, "control_ledc CHANNEL: %d DUTY: %ld", channel, duty);
-    
-    if(duty<2)duty=0;
-    else if(duty>254)duty = 8191;
-    else{
-        duty = duty * 32;
+    uint32_t target;
+    if(duty<2) target=0;
+    else if(duty>254) target=8191;
+    else target = duty * 32;
+
+    if(target==0){
+        ESP_ERROR_CHECK(ledc_set_duty(LEDC_MODE, channel, 0));
+        ESP_ERROR_CHECK(ledc_update_duty(LEDC_MODE, channel));
+        return;
     }
-    duty = duty;
-    ESP_ERROR_CHECK(ledc_set_duty(LEDC_MODE, channel, duty));
-    // Update duty to apply the new value
-    ESP_ERROR_CHECK(ledc_update_duty(LEDC_MODE, channel));
+
+    ESP_ERROR_CHECK(ledc_set_fade_with_time(LEDC_MODE, channel, target, 800));
+    ESP_ERROR_CHECK(ledc_fade_start(LEDC_MODE, channel, LEDC_FADE_NO_WAIT));
 }
 
 void dimmable_plug_pwm_init(void)
@@ -143,6 +146,7 @@ void dimmable_plug_pwm_init(void)
 
     ESP_ERROR_CHECK(ledc_set_duty(LEDC_MODE, LEDC_CHANNEL_1, 0));
     ESP_ERROR_CHECK(ledc_update_duty(LEDC_MODE, LEDC_CHANNEL_1));
+    ESP_ERROR_CHECK(ledc_fade_func_install(0));
 }
 
 void on_device_before_sleep(void){
