@@ -8,12 +8,14 @@
 #include "esp_timer.h"
 #include "device_common.h"
 #include "esp_sleep.h"
+#include "esp_ota_ops.h"
 
 #include "esp_heap_caps.h"
 
 #include "Battery.h"
 
 static const char *TAG = "base_device";
+static const esp_app_desc_t *app_desc = NULL;
 
 
 // property list
@@ -147,6 +149,8 @@ static void report_all_properties(void){
     // build json
     cJSON *root = cJSON_CreateObject();
     cJSON_AddStringToObject(root, "method", "report");
+    if (app_desc == NULL) app_desc = esp_ota_get_app_description();
+    cJSON_AddStringToObject(root, "ver", app_desc->version);
     #ifdef DEBUG_HEAP
     char memeory_info[64];
     sprintf(memeory_info, "heap_caps_get_free_size: %d", heap_caps_get_free_size(MALLOC_CAP_8BIT));
@@ -176,6 +180,7 @@ static void report_all_properties(void){
 void device_init(void)
 {
     ESP_LOGI(TAG, "device_init");
+    app_desc = esp_ota_get_app_description();
     
 #ifdef CONNECTED_LED
     led_init();

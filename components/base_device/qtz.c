@@ -216,7 +216,18 @@ void on_mqtt_msg_process(char *topic, cJSON *root)
 void on_device_first_ready(void)
 {
     ESP_LOGI(TAG, "device_first_ready");
-    // start report distance task every report_delay_ms
+
+    ESP_ERROR_CHECK(i2c_master_init());
+    ESP_LOGI(TAG, "I2C初始化完成");
+    ESP_ERROR_CHECK(vl6180x_init());
+    ESP_LOGI(TAG, "VL6180X传感器初始化完成");
+    ESP_ERROR_CHECK(vl6180x_configure_default());
+    ESP_LOGI(TAG, "VL6180X传感器配置完成");
+    ESP_ERROR_CHECK(vl6180x_set_scaling(3));
+    ESP_LOGI(TAG, "设置缩放为3");
+    vl6180x_set_timeout(500);
+    ESP_LOGI(TAG, "设置超时为500ms");
+    xTaskCreate(check_distance_task, "check_distance_task", 1024 * 2, NULL, 10, NULL);
     xTaskCreate(report_distance_task, "report_distance_task", 1024 * 2, NULL, 10, NULL);
 }
 
@@ -646,29 +657,6 @@ void on_device_init(void)
 
     // 初始化按钮
     init_buttons();
-
-    // 初始化I2C
-    ESP_ERROR_CHECK(i2c_master_init());
-    ESP_LOGI(TAG, "I2C初始化完成");
-    
-    // 初始化VL6180X传感器
-    ESP_ERROR_CHECK(vl6180x_init());
-    ESP_LOGI(TAG, "VL6180X传感器初始化完成");
-    
-    // 配置默认参数
-    ESP_ERROR_CHECK(vl6180x_configure_default());
-    ESP_LOGI(TAG, "VL6180X传感器配置完成");
-    
-    // 设置缩放为3
-    ESP_ERROR_CHECK(vl6180x_set_scaling(3));
-    ESP_LOGI(TAG, "设置缩放为3");
-    
-    // 设置超时为500ms
-    vl6180x_set_timeout(500);
-    ESP_LOGI(TAG, "设置超时为500ms");
-
-    // start distance task
-    xTaskCreate(check_distance_task, "check_distance_task", 1024 * 2, NULL, 10, NULL);
 
 
     // inout_divider_property.value.int_value = inout_divider;
