@@ -20,7 +20,7 @@ parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
-from virtual_devices import TD01Device, DianjiDevice, ZidongsuoDevice, QTZDevice, QiyaDevice, BaseVirtualDevice
+from virtual_devices import TD01Device, DianjiDevice, ZidongsuoDevice, QTZDevice, QiyaDevice, PJ01Device, BaseVirtualDevice
 
 class DeviceGUIController:
     """设备GUI控制器主类"""
@@ -72,6 +72,8 @@ class DeviceGUIController:
         # 设备创建按钮
         ttk.Button(control_frame, text="创建TD01设备", 
                   command=lambda: self.create_device("TD01")).pack(side=tk.LEFT, padx=5)
+        ttk.Button(control_frame, text="创建PJ01设备", 
+                  command=lambda: self.create_device("PJ01")).pack(side=tk.LEFT, padx=5)
         ttk.Button(control_frame, text="创建电击设备", 
                   command=lambda: self.create_device("DIANJI")).pack(side=tk.LEFT, padx=5)
         ttk.Button(control_frame, text="创建自动锁设备", 
@@ -151,7 +153,7 @@ class DeviceGUIController:
     
     def auto_create_devices(self):
         """自动创建并启动所有设备类型"""
-        device_types = ["TD01", "DIANJI", "ZIDONGSUO", "QTZ", "QIYA"]
+        device_types = ["TD01", "PJ01", "DIANJI", "ZIDONGSUO", "QTZ", "QIYA"]
         
         for device_type in device_types:
             try:
@@ -181,6 +183,8 @@ class DeviceGUIController:
             # 创建设备实例
             if device_type == "TD01":
                 device = TD01Device(device_id)
+            elif device_type == "PJ01":
+                device = PJ01Device(device_id)
             elif device_type == "DIANJI":
                 device = DianjiDevice(device_id)
             elif device_type == "ZIDONGSUO":
@@ -272,7 +276,7 @@ class DeviceGUIController:
                 
                 # 如果属性可写，添加控制组件
                 if prop_info["writeable"]:
-                    if prop_name in ["power", "voltage", "delay", "low_band", "high_band", "report_delay_ms", "sleep_time", "report_interval", "pressure"]:
+                    if prop_name in ["power", "voltage", "delay", "low_band", "high_band", "report_delay_ms", "sleep_time", "report_interval", "pressure","distance"]:
                         # 数值输入
                         entry = ttk.Entry(props_frame, width=8)
                         entry.grid(row=row, column=2, padx=3, pady=1)

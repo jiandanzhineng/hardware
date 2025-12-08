@@ -20,35 +20,35 @@
 
 ### 基础属性
 
-| 属性名 | 类型 | 读写权限 | 描述 | 默认值 | 范围 |
-|--------|------|----------|------|--------|---------|
-| `device_type` | string | 只读 | 设备类型标识 | 根据设备而定 | - |
-| `sleep_time` | int | 读写 | 设备休眠时间(秒) | 7200 | 0-86400 |
-| `battery` | int | 只读 | 电池电量百分比 | 80-100 | 0-100 |
+| 属性名          | 类型   | 读写权限 | 描述             | 默认值       | 范围    |
+| --------------- | ------ | -------- | ---------------- | ------------ | ------- |
+| `device_type` | string | 只读     | 设备类型标识     | 根据设备而定 | -       |
+| `sleep_time`  | int    | 读写     | 设备休眠时间(秒) | 7200         | 0-86400 |
+| `battery`     | int    | 只读     | 电池电量百分比   | 80-100       | 0-100   |
 
 ### 通用动作
 
 - **心跳上报**: 设备每10秒自动上报所有可读属性
 - **电池监控**: 设备自动监控电池电量变化
-- **休眠管理**: 当超过`sleep_time`秒无消息时，设备进入深度休眠
+- **休眠管理**: 当超过 `sleep_time`秒无消息时，设备进入深度休眠
 
 ---
 
 ## TD01 单路电机控制器
 
-**设备类型**: `TD01`  
+**设备类型**: `TD01`
 **描述**: 单路可调电机智能插座，支持PWM电机控制
 
 ### 设备属性
 
-| 属性名 | 类型 | 读写权限 | 描述 | 默认值 | 范围 |
-|--------|------|----------|------|--------|---------|
-| `power` | int | 读写 | 功率控制 | 0 | 0-255 |
+| 属性名    | 类型 | 读写权限 | 描述     | 默认值 | 范围  |
+| --------- | ---- | -------- | -------- | ------ | ----- |
+| `power` | int  | 读写     | 功率控制 | 0      | 0-255 |
 
 ### 功能说明
 
 - **功率控制**: 通过PWM信号控制输出的功率
-- **按键检测**: 内置按键，按下时触发`key_boot_clicked`动作
+- **按键检测**: 内置按键，按下时触发 `key_boot_clicked`动作
 - **实时响应**: 属性变化立即生效，无延迟
 
 ### 硬件接口
@@ -78,22 +78,22 @@
 
 ### 触发事件
 
-- **按键事件**: 当按下设备按键时，发送`key_boot_clicked`动作消息
+- **按键事件**: 当按下设备按键时，发送 `key_boot_clicked`动作消息
 
 ---
 
 ## DIANJI 电击设备
 
-**设备类型**: `DIANJI`  
+**设备类型**: `DIANJI`
 **描述**: 电击设备，支持电压控制和定时电击功能
 
 ### 设备属性
 
-| 属性名 | 类型 | 读写权限 | 描述 | 默认值 | 范围 |
-|--------|------|----------|------|--------|---------|
-| `voltage` | int | 读写 | 输出电压值 | 0 | 0-100 |
-| `delay` | int | 读写 | 电击间隔时间(ms) | 30 | 20-1000 |
-| `shock` | int | 读写 | 电击开关状态 | 0 | 0-1 |
+| 属性名      | 类型 | 读写权限 | 描述             | 默认值 | 范围    |
+| ----------- | ---- | -------- | ---------------- | ------ | ------- |
+| `voltage` | int  | 读写     | 输出电压值       | 0      | 0-100   |
+| `delay`   | int  | 读写     | 电击间隔时间(ms) | 30     | 20-1000 |
+| `shock`   | int  | 读写     | 电击开关状态     | 0      | 0-1     |
 
 ### 功能说明
 
@@ -149,14 +149,14 @@
 
 ## ZIDONGSUO 自动锁
 
-**设备类型**: `ZIDONGSUO`  
+**设备类型**: `ZIDONGSUO`
 **描述**: 智能自动锁，支持舵机控制和状态指示
 
 ### 设备属性
 
-| 属性名 | 类型 | 读写权限 | 描述 | 默认值 | 范围 |
-|--------|------|----------|------|--------|---------|
-| `open` | int | 读写 | 锁开关状态 | 0 | 0-1 |
+| 属性名   | 类型 | 读写权限 | 描述       | 默认值 | 范围 |
+| -------- | ---- | -------- | ---------- | ------ | ---- |
+| `open` | int  | 读写     | 锁开关状态 | 0      | 0-1  |
 
 ### 功能说明
 
@@ -200,9 +200,10 @@
 
 ### 触发事件
 
-- **按键事件**: 当按下设备按键时，发送`key_clicked`动作消息
+- **按键事件**: 当按下设备按键时，发送 `key_clicked`动作消息
 
 **示例**:
+
 ```json
 {
   "method": "action",
@@ -214,19 +215,19 @@
 
 ## QTZ 激光测距传感器
 
-**设备类型**: `QTZ`  
+**设备类型**: `QTZ`
 **描述**: 基于VL6180X的高精度激光测距传感器，支持距离检测和阈值报警
 
 ### 设备属性
 
-| 属性名 | 类型 | 读写权限 | 描述 | 默认值 | 范围 |
-|--------|------|----------|------|--------|---------|
-| `distance` | float | 只读 | 当前检测距离(mm) | 0 | 10-500 |
-| `report_delay_ms` | int | 读写 | 上报间隔时间(ms) | 10000 | 100-10000 |
-| `low_band` | int | 读写 | 低阈值(mm) | 60 | 0-200 |
-| `high_band` | int | 读写 | 高阈值(mm) | 150 | 0-200 |
-| `button0` | int | 只读 | 按键0状态 | 0 | 0-1 |
-| `button1` | int | 只读 | 按键1状态 | 0 | 0-1 |
+| 属性名              | 类型  | 读写权限 | 描述             | 默认值 | 范围      |
+| ------------------- | ----- | -------- | ---------------- | ------ | --------- |
+| `distance`        | float | 只读     | 当前检测距离(mm) | 0      | 10-500    |
+| `report_delay_ms` | int   | 读写     | 上报间隔时间(ms) | 10000  | 100-10000 |
+| `low_band`        | int   | 读写     | 低阈值(mm)       | 60     | 0-200     |
+| `high_band`       | int   | 读写     | 高阈值(mm)       | 150    | 0-200     |
+| `button0`         | int   | 只读     | 按键0状态        | 0      | 0-1       |
+| `button1`         | int   | 只读     | 按键1状态        | 0      | 0-1       |
 
 ### 功能说明
 
@@ -278,11 +279,12 @@
 
 ### 触发事件
 
-- **低阈值触发**: 当距离小于`low_band`时，发送`low`动作消息
-- **高阈值触发**: 当距离大于`high_band`时，发送`high`动作消息
+- **低阈值触发**: 当距离小于 `low_band`时，发送 `low`动作消息
+- **高阈值触发**: 当距离大于 `high_band`时，发送 `high`动作消息
 - **按键事件**: 按键按下/释放时发送相应动作消息
 
 **触发事件示例**:
+
 ```json
 // 距离低于阈值时的触发消息
 {
@@ -315,90 +317,69 @@
 
 ## PJ01 PWM电机控制器
 
-**设备类型**: `PJ01`  
-**描述**: PWM电机控制器，支持精确的电机速度控制，无电池设计
+**设备类型**: `PJ01`
+**描述**: PWM电机控制器，使用 `power`(0-255)控制输出功率，无电池设计
 
 ### 设备属性
 
-| 属性名 | 类型 | 读写权限 | 描述 | 默认值 | 范围 |
-|--------|------|----------|------|--------|----------|
-| `pwm_duty` | int | 读写 | PWM占空比 | 0 | 0-1023 |
+| 属性名    | 类型 | 读写权限 | 描述     | 默认值 | 范围  |
+| --------- | ---- | -------- | -------- | ------ | ----- |
+| `power` | int  | 读写     | 功率控制 | 0      | 0-255 |
 
 ### 功能说明
 
-- **PWM控制**: 通过设置占空比(0-1023)精确控制电机转速
+- **PWM控制**: 通过 `power`(0-255)控制输出，占空比 `duty = 1023 - power * 4`
 - **GPIO控制**: 内置转向控制引脚(TURN_PIN)和LED指示引脚(LED_PIN)
 - **无电池设计**: 该设备不包含电池属性，适用于外部供电场景
-- **实时响应**: PWM占空比变化立即生效
+- **实时响应**: 属性变化立即生效
 
 ### 设备动作
 
-#### motor_control - 电机控制
-
-**描述**: 直接控制电机PWM占空比
-
-**参数**:
-- `duty` (int): PWM占空比值，范围0-1023
-
-**示例**:
-```json
-{
-    "method": "motor_control",
-    "duty": 512
-}
-```
+* 暂无
 
 ### 使用示例
 
-#### 设置PWM占空比
-```javascript
-// 设置PWM占空比为50% (512/1023)
-controller.setDeviceProperty('pj01001aabbcc', 'pwm_duty', 512);
+#### 设置功率
 
-// 设置PWM占空比为100% (最大速度)
-controller.setDeviceProperty('pj01001aabbcc', 'pwm_duty', 1023);
+```javascript
+// 设置功率为50% (128/255)
+controller.setDeviceProperty('pj01001aabbcc', 'power', 128);
+
+// 设置最大功率
+controller.setDeviceProperty('pj01001aabbcc', 'power', 255);
 
 // 停止电机
-controller.setDeviceProperty('pj01001aabbcc', 'pwm_duty', 0);
+controller.setDeviceProperty('pj01001aabbcc', 'power', 0);
 ```
 
 #### 电机控制动作
-```javascript
-// 通过动作控制电机
-const motorCommand = {
-    method: 'motor_control',
-    duty: 768  // 75%速度
-};
-controller.client.publish('/drecv/pj01001aabbcc', JSON.stringify(motorCommand));
-```
 
-#### 读取当前PWM值
+#### 读取当前功率
+
 ```javascript
-// 获取当前PWM占空比
-controller.getDeviceProperty('pj01001aabbcc', 'pwm_duty');
+// 获取当前功率
+controller.getDeviceProperty('pj01001aabbcc', 'power');
 ```
 
 ### 注意事项
 
-1. **占空比范围**: PWM占空比必须在0-1023范围内，超出范围的值会被拒绝
-2. **电机保护**: 建议在长时间高速运行后适当降低速度，避免电机过热
+1. **电机保护**: 建议在长时间高速运行后适当降低速度，避免电机过热
 3. **无电池监控**: PJ01设备不包含电池属性，无需关注电池电量
-4. **GPIO状态**: 设备初始化时会自动设置TURN_PIN和LED_PIN为高电平
 
 ---
 
 ## QIYA 气压检测设备
 
-**设备类型**: `QIYA`  
+**设备类型**: `QIYA`
 **描述**: 气压检测设备，支持气压和温度测量
 
 ### 设备属性
 
-| 属性名 | 类型 | 读写权限 | 描述 | 默认值 | 范围 |
-|--------|------|----------|------|--------|----------|
-| `pressure` | float | 只读 | 气压值(kPa) | 0 | -40-40 |
-| `temperature` | float | 只读 | 环境温度(°C) | 25.0 | -40-85 |
-| `report_delay_ms` | int | 读写 | 数据上报间隔(ms) | 5000 | 0-60000 |
+| 属性名              | 类型  | 读写权限 | 描述             | 默认值 | 范围    |
+| ------------------- | ----- | -------- | ---------------- | ------ | ------- |
+| `pressure`        | float | 只读     | 气压值(kPa)      | 0      | -40-40  |
+| `temperature`     | float | 只读     | 环境温度(°C)    | 25.0   | -40-85  |
+| `report_delay_ms` | int   | 读写     | 数据上报间隔(ms) | 5000   | 0-60000 |
 
 ---
 
@@ -490,13 +471,13 @@ controller.getDeviceProperty('pj01001aabbcc', 'pwm_duty');
 
 ## 错误代码
 
-| 错误代码 | 描述 | 解决方案 |
-|----------|------|----------|
-| -1 | 属性不存在 | 检查属性名称是否正确 |
-| -2 | 属性只读 | 使用只读属性不能设置值 |
-| -3 | 值超出范围 | 检查设置值是否在允许范围内 |
-| -4 | JSON格式错误 | 检查消息格式是否正确 |
-| -5 | 设备离线 | 检查设备连接状态 |
+| 错误代码 | 描述         | 解决方案                   |
+| -------- | ------------ | -------------------------- |
+| -1       | 属性不存在   | 检查属性名称是否正确       |
+| -2       | 属性只读     | 使用只读属性不能设置值     |
+| -3       | 值超出范围   | 检查设置值是否在允许范围内 |
+| -4       | JSON格式错误 | 检查消息格式是否正确       |
+| -5       | 设备离线     | 检查设备连接状态           |
 
 ---
 
@@ -516,58 +497,58 @@ class DeviceController:
         self.client.on_message = self._on_message
         self.client.connect(broker_host, broker_port, 60)
         self.client.loop_start()
-    
+  
     def _on_connect(self, client, userdata, flags, rc):
         print(f"Connected with result code {rc}")
         # 订阅所有设备上报和全局广播
         client.subscribe("/dpub/+")
         client.subscribe("/all")
-    
+  
     def _on_message(self, client, userdata, msg):
         topic = msg.topic
         payload = json.loads(msg.payload.decode())
         print(f"Received from {topic}: {payload}")
-    
+  
     def set_device_property(self, mac_address, key, value, msg_id=None):
         """设置设备属性"""
         if msg_id is None:
             msg_id = int(time.time() * 1000)
-        
+    
         command = {
             "method": "set",
             "key": key,
             "value": value,
             "msg_id": msg_id
         }
-        
+    
         topic = f"/drecv/{mac_address}"
         self.client.publish(topic, json.dumps(command), qos=1)
-    
+  
     def get_device_property(self, mac_address, key, msg_id=None):
         """获取设备属性"""
         if msg_id is None:
             msg_id = int(time.time() * 1000)
-        
+    
         command = {
             "method": "get",
             "key": key,
             "msg_id": msg_id
         }
-        
+    
         topic = f"/drecv/{mac_address}"
         self.client.publish(topic, json.dumps(command), qos=1)
-    
+  
     def update_device_properties(self, mac_address, properties, msg_id=None):
         """批量更新设备属性"""
         if msg_id is None:
             msg_id = int(time.time() * 1000)
-        
+    
         command = {
             "method": "update",
             "msg_id": msg_id
         }
         command.update(properties)
-        
+    
         topic = f"/drecv/{mac_address}"
         self.client.publish(topic, json.dumps(command), qos=1)
 
@@ -601,42 +582,42 @@ const mqtt = require('mqtt');
 class DeviceController {
     constructor(brokerUrl = 'mqtt://localhost:1883') {
         this.client = mqtt.connect(brokerUrl);
-        
+    
         this.client.on('connect', () => {
             console.log('Connected to MQTT broker');
             this.client.subscribe('/dpub/+');
             this.client.subscribe('/all');
         });
-        
+    
         this.client.on('message', (topic, message) => {
             const payload = JSON.parse(message.toString());
             console.log(`Received from ${topic}:`, payload);
         });
     }
-    
+  
     setDeviceProperty(macAddress, key, value, msgId = null) {
         if (!msgId) msgId = Date.now();
-        
+    
         const command = {
             method: 'set',
             key: key,
             value: value,
             msg_id: msgId
         };
-        
+    
         const topic = `/drecv/${macAddress}`;
         this.client.publish(topic, JSON.stringify(command), { qos: 1 });
     }
-    
+  
     getDeviceProperty(macAddress, key, msgId = null) {
         if (!msgId) msgId = Date.now();
-        
+    
         const command = {
             method: 'get',
             key: key,
             msg_id: msgId
         };
-        
+    
         const topic = `/drecv/${macAddress}`;
         this.client.publish(topic, JSON.stringify(command), { qos: 1 });
     }
@@ -650,7 +631,7 @@ setTimeout(() => {
     controller.setDeviceProperty('aabbccddeeff', 'power', 255);
     controller.setDeviceProperty('112233445566', 'open', 1);
     controller.getDeviceProperty('778899aabbcc', 'distance');
-    
+  
     // 向所有设备发送广播命令
     controller.client.publish('/all', JSON.stringify({method: 'get', key: 'battery'}), {qos: 1});
 }, 1000);
@@ -668,5 +649,5 @@ setTimeout(() => {
 
 如有问题或建议，请联系开发团队。
 
-**文档更新时间**: 2024-01-01  
+**文档更新时间**: 2024-01-01
 **API版本**: v1.0.0

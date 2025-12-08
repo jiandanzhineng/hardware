@@ -344,9 +344,10 @@ class PJ01Device(BaseVirtualDevice):
     def __init__(self, device_id: str, **kwargs):
         super().__init__(device_id, "PJ01", **kwargs)
         
-        # PJ01设备特有属性
+        # PJ01设备特有属性（按文档：使用power 0-255，映射到PWM占空比）
         self.properties.update({
-            "pwm_duty": {"value": 0, "readable": True, "writeable": True},  # PWM占空比 (0-1023)
+            "power": {"value": 0, "readable": True, "writeable": True},
+            "pwm_duty": {"value": 1023, "readable": True, "writeable": False}
         })
         
         # 移除电池属性，因为PJ01设备没有电池
@@ -367,12 +368,24 @@ class PJ01Device(BaseVirtualDevice):
     
     def _on_property_changed(self, property_name: str, value: Any, msg_id: int):
         """PJ01设备属性变化处理"""
-        if property_name == "pwm_duty":
-            if 0 <= value <= 1023:
-                self.current_pwm_duty = int(value)
-                self.logger.info(f"PWM duty set to {value} (motor speed: {value/1023*100:.1f}%)")
-            else:
-                self.logger.error(f"Invalid PWM duty value: {value} (should be 0-1023)")
+        if property_name == "power":
+            try:
+                p = int(value)
+            except Exception:
+                p = 0
+            if p < 0:
+                p = 0
+            if p > 255:
+                p = 255
+            duty = 1023 - p * 4
+            if duty < 0:
+                duty = 0
+            if duty > 1023:
+                duty = 1023
+            self.current_pwm_duty = duty
+            if "pwm_duty" in self.properties:
+                self.properties["pwm_duty"]["value"] = duty
+            self.logger.info(f"Power set to {p}, PWM duty={duty}")
     
     def _on_action(self, data: Dict[str, Any]):
         """PJ01设备动作处理"""
@@ -390,10 +403,8 @@ class PJ01Device(BaseVirtualDevice):
         """PWM控制任务 - 模拟电机控制"""
         while self.running:
             try:
-                # 更新PWM占空比属性
-                self.properties["pwm_duty"]["value"] = self.current_pwm_duty
-                
-                # 模拟电机运行状态日志
+                if "pwm_duty" in self.properties:
+                    self.properties["pwm_duty"]["value"] = self.current_pwm_duty
                 if self.current_pwm_duty > 0:
                     motor_speed_percent = self.current_pwm_duty / 1023 * 100
                     if motor_speed_percent > 80:
@@ -402,9 +413,7 @@ class PJ01Device(BaseVirtualDevice):
                         self.logger.debug(f"Motor running at medium speed: {motor_speed_percent:.1f}%")
                     else:
                         self.logger.debug(f"Motor running at low speed: {motor_speed_percent:.1f}%")
-                
-                time.sleep(2)  # 每2秒更新一次
-                
+                time.sleep(2)
             except Exception as e:
                 self.logger.error(f"Error in PWM control: {e}")
     
@@ -557,7 +566,7 @@ class QTZDevice(BaseVirtualDevice):
         
         # QTZ特有属性
         self.properties.update({
-            "distance": {"value": 100.0, "readable": True, "writeable": False},        # 当前距离(mm)
+            "distance": {"value": 100.0, "readable": True, "writeable": True},        # 当前距离(mm)
             "report_delay_ms": {"value": 10000, "readable": True, "writeable": True}, # 上报间隔
             "low_band": {"value": 60, "readable": True, "writeable": True},          # 低阈值
             "high_band": {"value": 150, "readable": True, "writeable": True},        # 高阈值
@@ -632,6 +641,7 @@ class QTZDevice(BaseVirtualDevice):
                 # 模拟VL6180X传感器的距离变化
                 # 添加传感器噪声和更真实的变化模式
                 noise = random.uniform(-self.sensor_noise, self.sensor_noise)
+                self.current_distance = float(self.properties["distance"]["value"])
                 
                 # 模拟物体移动：缓慢变化 + 偶尔快速变化
                 if random.random() < 0.05:  # 5%概率快速变化（物体快速移动）
@@ -649,7 +659,7 @@ class QTZDevice(BaseVirtualDevice):
                                       min(self.measurement_range[1], measured_distance))
                 
                 # 计算平均值（模拟C代码中的滤波）
-                self.average_distance = 0.7 * self.average_distance + 0.3 * measured_distance
+                self.average_distance = measured_distance
                 
                 # 更新距离属性
                 self.properties["distance"]["value"] = round(measured_distance, 1)
