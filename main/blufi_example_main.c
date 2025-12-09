@@ -32,6 +32,7 @@
 #include "mqtt_client.h"
 #include "cJSON.h"
 #include "esp_mac.h"
+#include "device_ble_service.h"
 
 // self make header
 #include "smqtt.h"
@@ -639,9 +640,10 @@ void app_main(void)
 
     BLUFI_INFO("BLUFI VERSION %04x\n", esp_blufi_get_version());
 
-    
 
     device_init();
+
+    device_ble_service_init();
 
     while (1)
     {
