@@ -533,6 +533,10 @@ void pwm_output(void *arg)
             }
             
             target_v = voltage_property.value.int_value;
+            if(target_v > voltage_property.max){
+                target_v = voltage_property.max;}
+            else if(target_v < voltage_property.min){
+                target_v = voltage_property.min;}
             float error = target_v - now_v;
             // 如果误差在死区范围内，则不做控制输出
             if (fabs(error) > pid.dead_zone)
