@@ -29,7 +29,7 @@ static uint16_t handle_table[IDX_NB];
 
 static const uint16_t primary_service_uuid = ESP_GATT_UUID_PRI_SERVICE;
 static const uint16_t character_declaration_uuid = ESP_GATT_UUID_CHAR_DECLARE;
-static const uint8_t char_prop_write = ESP_GATT_CHAR_PROP_BIT_WRITE;
+static const uint8_t char_prop_write = ESP_GATT_CHAR_PROP_BIT_WRITE | ESP_GATT_CHAR_PROP_BIT_WRITE_NR;
 static const uint16_t service_uuid = SERVICE_UUID;
 static const uint16_t char_uuid = CHAR_UUID;
 static const uint8_t char_value[1] = {0x00};
@@ -89,6 +89,7 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_
             break;
             
         case ESP_GATTS_WRITE_EVT:
+            ESP_LOGI(TAG, "WRITE_EVT handle=0x%04x len=%d", param->write.handle, param->write.len);
             if (handle_table[IDX_CHAR_VAL] == param->write.handle) {
                 ESP_LOGI(TAG, "Received %d bytes:", param->write.len);
                 esp_log_buffer_hex(TAG, param->write.value, param->write.len);
