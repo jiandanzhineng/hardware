@@ -5,3 +5,4 @@ void device_ble_service_init(void);
 void device_ble_update_property(int index);
 
 #endif
+

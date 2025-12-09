@@ -203,7 +203,6 @@ static void build_gatt_table(void) {
             idx++;
         }
 
-        // Add User Description Descriptor (0x2901)
         static const uint16_t user_desc_uuid = ESP_GATT_UUID_CHAR_DESCRIPTION;
         gatt_db[idx].attr_control.auto_rsp = ESP_GATT_AUTO_RSP;
         gatt_db[idx].att_desc.uuid_length = ESP_UUID_LEN_16;
@@ -227,7 +226,6 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_
                 esp_ble_gatts_create_attr_tab(gatt_db, gatts_if, total_attr_count, 0);
             }
             break;
-            
         case ESP_GATTS_CREAT_ATTR_TAB_EVT:
             ESP_LOGI(TAG, "ESP_GATTS_CREAT_ATTR_TAB_EVT, status = %d, num_handle = %d", param->add_attr_tab.status, param->add_attr_tab.num_handle);
             if (param->add_attr_tab.status == ESP_GATT_OK && param->add_attr_tab.num_handle == total_attr_count) {
@@ -237,15 +235,12 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_
                 ESP_LOGE(TAG, "Create attribute table failed, error code = %x", param->add_attr_tab.status);
             }
             break;
-            
         case ESP_GATTS_WRITE_EVT:
             ESP_LOGI(TAG, "ESP_GATTS_WRITE_EVT, conn_id = %d, handle = %d, len = %d", param->write.conn_id, param->write.handle, param->write.len);
             conn_id_last = param->write.conn_id;
             if (handle_table[2] == param->write.handle) {
                 ESP_LOGI(TAG, "Received %d bytes:", param->write.len);
                 esp_log_buffer_hex(TAG, param->write.value, param->write.len);
-                
-                // Try to print as string
                 char *str = malloc(param->write.len + 1);
                 if (str) {
                     memcpy(str, param->write.value, param->write.len);
@@ -333,7 +328,6 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_
             }
             update_last_msg_time();
             break;
-            
         default:
             ESP_LOGI(TAG, "default, event = %d", event);
             break;
@@ -371,3 +365,4 @@ void device_ble_update_property(int i){
         }
     }
 }
+
