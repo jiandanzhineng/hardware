@@ -80,6 +80,8 @@ void get_mac_address(void);
 static const char *TAG = "SMARTDEVICE";
 static const char *DEVICE_TYPE = "BASE_DEVICE";
 
+volatile device_mode_t g_device_mode = MODE_WIFI;
+
 void get_mac_address(void)
 {
     esp_efuse_mac_get_default(macAddr);
