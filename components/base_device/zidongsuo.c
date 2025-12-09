@@ -230,7 +230,7 @@ void battery_task(void *pvParameters)
         
         // 将电压值转换为百分比并设置到battery_property
         int battery_percentage = toPercentage(battery_v);
-        battery_property.value.int_value = battery_percentage;
+        device_update_property_int("battery", battery_percentage);
         ESP_LOGI(TAG, "Battery Percentage: %d%%", battery_percentage);
         
         // Check if battery is below 20% and count consecutive low readings
@@ -274,7 +274,7 @@ void emergency_mode_task(void *pvParameters)
             ESP_LOGI(TAG, "Emergency mode active - opening device");
             
             // Set open property to 1 (open)
-            open_property.value.int_value = 1;
+            device_update_property_int("open", 1);
             
             // Update servo position to open (0 degrees)
             set_servo_angle(0.0f);

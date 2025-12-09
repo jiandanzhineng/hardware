@@ -219,7 +219,7 @@ void stop_shock_task()
         }
         else if (remain_time > 0)
         {
-            shock_property.value.int_value = 0;
+            device_update_property_int("shock", 0);
             remain_time = 0;
         }
     }
@@ -708,7 +708,7 @@ void nvs_dianji_read(void)
         {
         case ESP_OK:
             ESP_LOGI(TAG, "Read safe value from NVS: %d", (int)safe_value);
-            safe_property.value.int_value = safe_value;
+            device_update_property_int("safe", safe_value);
             break;
         case ESP_ERR_NVS_NOT_FOUND:
             ESP_LOGI(TAG, "Safe value not found in NVS, using default: 1");

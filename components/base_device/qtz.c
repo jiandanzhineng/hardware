@@ -535,7 +535,7 @@ static void check_distance_task(void)
         if (vl6180x_timeout_occurred()) {
             ESP_LOGE(VL6180X_TAG, "传感器超时");
         } else {
-            distance_property.value.float_value = (float)distance;
+            device_update_property_float("distance", (float)distance);
             average_length_mm = distance_property.value.float_value;
             //ESP_LOGI(VL6180X_TAG, "距离: %.2f mm 平均:%.2f mm", distance_property.value.float_value, average_length_mm);
             update_in_state();
@@ -660,8 +660,8 @@ void on_device_init(void)
 
 
     // inout_divider_property.value.int_value = inout_divider;
-    low_band_property.value.int_value = low_band;
-    high_band_property.value.int_value = high_band;
+    device_update_property_int("low_band", low_band);
+    device_update_property_int("high_band", high_band);
 }
 
 
@@ -740,7 +740,7 @@ void nvs0_set(void)
 static void button0_press_cb(void *arg, void *usr_data)
 {
     ESP_LOGI(BUTTON_TAG, "Button 0 pressed");
-    button0_property.value.int_value = 1;
+    device_update_property_int("button0", 1);
     get_property("button0", 0);
 }
 
@@ -748,7 +748,7 @@ static void button0_press_cb(void *arg, void *usr_data)
 static void button0_release_cb(void *arg, void *usr_data)
 {
     ESP_LOGI(BUTTON_TAG, "Button 0 released");
-    button0_property.value.int_value = 0;
+    device_update_property_int("button0", 0);
     get_property("button0", 0);
 }
 
@@ -756,7 +756,7 @@ static void button0_release_cb(void *arg, void *usr_data)
 static void button1_press_cb(void *arg, void *usr_data)
 {
     ESP_LOGI(BUTTON_TAG, "Button 1 pressed");
-    button1_property.value.int_value = 1;
+    device_update_property_int("button1", 1);
     get_property("button1", 0);
 }
 
@@ -764,7 +764,7 @@ static void button1_press_cb(void *arg, void *usr_data)
 static void button1_release_cb(void *arg, void *usr_data)
 {
     ESP_LOGI(BUTTON_TAG, "Button 1 released");
-    button1_property.value.int_value = 0;
+    device_update_property_int("button1", 0);
     get_property("button1", 0);
 }
 

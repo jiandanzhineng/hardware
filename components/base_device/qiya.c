@@ -245,8 +245,8 @@ static void read_pressure_data(void)
     ESP_LOGI(TAG, "Pressure: %.2f kPa, Temperature: %.2f °C", current_pressure, current_temperature);
 
     // update properties
-    pressure_property.value.float_value = current_pressure;
-    temperature_property.value.float_value = current_temperature;
+    device_update_property_float("pressure", current_pressure);
+    device_update_property_float("temperature", current_temperature);
 }
 
 static void report_pressure_task(void)
@@ -255,19 +255,19 @@ static void report_pressure_task(void)
     int32_t delay_ms;
     while (1) {
         read_pressure_data();
-        
-        cJSON *root = cJSON_CreateObject();
-        
-        // 限制到4位小数
-        double pressure_rounded = round(current_pressure * 10000.0) / 10000.0;
-        double temperature_rounded = round(current_temperature * 10000.0) / 10000.0;
-        
-        cJSON_AddNumberToObject(root, "pressure", pressure_rounded);
-        cJSON_AddNumberToObject(root, "temperature", temperature_rounded);
-        
-        cJSON_AddStringToObject(root, "method", "update");
-        mqtt_publish(root);
-        
+        if(g_device_mode == MODE_WIFI){
+            cJSON *root = cJSON_CreateObject();
+            
+            // 限制到4位小数
+            double pressure_rounded = round(current_pressure * 10000.0) / 10000.0;
+            double temperature_rounded = round(current_temperature * 10000.0) / 10000.0;
+            
+            cJSON_AddNumberToObject(root, "pressure", pressure_rounded);
+            cJSON_AddNumberToObject(root, "temperature", temperature_rounded);
+            
+            cJSON_AddStringToObject(root, "method", "update");
+            mqtt_publish(root);
+        }
         // 分段延时，最多1秒生效延迟
         if(report_interval_ms>1000){
             remaining_ms = report_interval_ms;

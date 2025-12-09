@@ -145,7 +145,7 @@ static void sleep_check_task(void){
         #ifndef BATTERY_CLOSE_EN
         uint8_t BatteryVoltagePer;
         battery_adc_get_value(&BatteryVoltagePer);
-        battery_property.value.int_value = BatteryVoltagePer;
+        device_update_property_int("battery", BatteryVoltagePer);
         #endif
         vTaskDelay(pdMS_TO_TICKS(10000));
         ESP_LOGI(TAG, "uptime: %lld, no message time: %lld/%d", esp_timer_get_time() / 1000000, esp_timer_get_time() / 1000000 - last_msg_time, sleep_time_property.value.int_value);
@@ -381,11 +381,14 @@ void get_property(char *property_name, int msg_id)
 }
 
 void mqtt_publish(cJSON *root){
-    char *json_data = cJSON_Print(root);
-    ESP_LOGI(TAG, "json_data: %s", json_data);
-    esp_mqtt_client_publish(smqtt_client, publish_topic, json_data, 0, 1, 0);
+    if(g_device_mode == MODE_WIFI){
+        char *json_data = cJSON_Print(root);
+        ESP_LOGI(TAG, "json_data: %s", json_data);
+        esp_mqtt_client_publish(smqtt_client, publish_topic, json_data, 0, 1, 0);
+        free(json_data);
+    }
     cJSON_Delete(root);
-    free(json_data);
+    
 }
 
 void device_update_property_int(const char *name, int v){

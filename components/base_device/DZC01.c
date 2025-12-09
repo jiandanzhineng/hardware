@@ -38,6 +38,7 @@ device_property_t display_on_property;
 device_property_t display_contrast_property;
 device_property_t line1_text_property;
 device_property_t line2_text_property;
+device_property_t button2_property;
 
 extern device_property_t device_type_property;
 extern device_property_t sleep_time_property;
@@ -54,6 +55,7 @@ device_property_t *device_properties[] = {
     &display_contrast_property,
     &line1_text_property,
     &line2_text_property,
+    &button2_property,
 };
 int device_properties_num = sizeof(device_properties) / sizeof(device_properties[0]);
 
@@ -422,7 +424,7 @@ static void weight_task(void *arg) {
         if (w < 0) w = 0;
         if (w > 5000.0f) w = 5000.0f;
         int iw = (int)(w + 0.5f);
-        weight_property.value.int_value = iw;
+        device_update_property_int("weight", iw);
         vTaskDelay(pdMS_TO_TICKS(200));
     }
 }
@@ -489,11 +491,15 @@ static void key4_cal_cb(void *arg, void *usr_data) { (void)arg; (void)usr_data; 
 
 
 // Key2: send key_clicked action
-static void key2_click_cb(void *arg, void *usr_data) {
-    cJSON *root = cJSON_CreateObject();
-    cJSON_AddStringToObject(root, "method", "action");
-    cJSON_AddStringToObject(root, "action", "key_clicked");
-    mqtt_publish(root);
+
+static void key2_press_cb(void *arg, void *usr_data) {
+    device_update_property_int("button2", 1);
+    get_property("button2", 0);
+}
+
+static void key2_release_cb(void *arg, void *usr_data) {
+    device_update_property_int("button2", 0);
+    get_property("button2", 0);
 }
 
 // Key1: enter deep sleep (simple power key)
@@ -530,7 +536,10 @@ static void init_keys(void) {
         },
     };
     button_handle_t b2 = iot_button_create(&k2);
-    if (b2) iot_button_register_cb(b2, BUTTON_SINGLE_CLICK, key2_click_cb, NULL);
+    if (b2) {
+        iot_button_register_cb(b2, BUTTON_PRESS_DOWN, key2_press_cb, NULL);
+        iot_button_register_cb(b2, BUTTON_PRESS_UP, key2_release_cb, NULL);
+    }
 
     // KEY3: tare (clear to zero)
     button_config_t k3 = {
@@ -605,6 +614,12 @@ void on_device_init(void) {
     line2_text_property.value_type = PROPERTY_TYPE_STRING;
     line2_text_property.value.string_value[0] = '\0';
 
+    button2_property.readable = true;
+    button2_property.writeable = false;
+    strcpy(button2_property.name, "button2");
+    button2_property.value_type = PROPERTY_TYPE_INT;
+    button2_property.value.int_value = 0;
+
     // NVS & HX711
     nvs_dzc01_init();
     nvs_dzc01_read();
@@ -622,7 +637,7 @@ void on_device_init(void) {
 }
 
 void on_device_first_ready(void) {
-    strcpy(line1_text_property.value.string_value, "Connected");
+    device_update_property_string("line1_text", "Connected");
     get_property("line1_text", 0);
     net_ready = true;
 }
