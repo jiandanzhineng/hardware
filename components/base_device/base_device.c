@@ -16,6 +16,8 @@
 
 #include "Battery.h"
 
+__attribute__((weak)) void device_ble_update_property(int index) {}
+
 static const char *TAG = "base_device";
 static const esp_app_desc_t *app_desc = NULL;
 
@@ -394,7 +396,7 @@ void device_update_property_int(const char *name, int v){
     if (i < 0) return;
     device_properties[i]->value.int_value = v;
     if(g_device_mode == MODE_BLE){
-        // device_ble_update_property(i);
+        device_ble_update_property(i);
     }
 }
 
@@ -406,7 +408,7 @@ void device_update_property_float(const char *name, float v){
     if (i < 0) return;
     device_properties[i]->value.float_value = v;
     if(g_device_mode == MODE_BLE){
-        // device_ble_update_property(i);
+        device_ble_update_property(i);
     }
 }
 
@@ -419,6 +421,6 @@ void device_update_property_string(const char *name, const char *v){
     strncpy(device_properties[i]->value.string_value, v, PROPERTY_VALUE_MAX - 1);
     device_properties[i]->value.string_value[PROPERTY_VALUE_MAX - 1] = 0;
     if(g_device_mode == MODE_BLE){
-        // device_ble_update_property(i);
+        device_ble_update_property(i);
     }
 }
