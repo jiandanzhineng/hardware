@@ -500,7 +500,7 @@ void get_bat_adc(void *arg)
         float bat_v = ((float)(adc1_get_raw(BAT_ADC)))/BAT_ADC_K;
         ESP_LOGI(TAG, "bat_v: %f", bat_v);
         bat_value = get_battery_percentage(bat_v);
-		battery_property.value.int_value = bat_value;
+        device_update_property_int("battery", bat_value);
         
         // 关闭电池电压检测电路以节省功耗
         gpio_set_level(BAT_ADC_EN, 0);

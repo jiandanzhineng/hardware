@@ -40,6 +40,10 @@ typedef struct device_property {
 extern esp_mqtt_client_handle_t smqtt_client;
 extern char publish_topic[32];
 
+typedef enum { MODE_WIFI = 0, MODE_BLE = 1 } device_mode_t;
+extern volatile device_mode_t g_device_mode;
+extern volatile int g_device_first_ready_called;
+
 
 void on_mqtt_msg_process(char *topic, cJSON *root);
 void on_set_property(char *property_name, cJSON *property_value, int msg_id);

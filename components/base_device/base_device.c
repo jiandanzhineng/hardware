@@ -10,6 +10,8 @@
 #include "esp_sleep.h"
 #include "esp_ota_ops.h"
 
+// #include "device_ble_service.h"
+
 #include "esp_heap_caps.h"
 
 #include "Battery.h"
@@ -26,6 +28,11 @@ extern device_property_t *device_properties[];
 
 
 long long last_msg_time = 0;
+volatile int g_device_first_ready_called = 0;
+
+void update_last_msg_time(void){
+    last_msg_time = esp_timer_get_time() / 1000000;
+}
 
 #ifdef CONNECTED_LED
 static esp_timer_handle_t led_blink_timer = NULL;
@@ -98,8 +105,22 @@ static void led_constant_on_then_off(void)
 }
 #endif
 
+static void heartbeat_task(void)
+{
+    // report device_type every 30 seconds
+    while(1) {
+        report_all_properties();
+        // print the time since boot
+        vTaskDelay(pdMS_TO_TICKS(10000));
+    }
+}
+
 void device_first_ready(void)
 {
+    if(g_device_first_ready_called){
+        return;
+    }
+    g_device_first_ready_called = 1;
     ESP_LOGI(TAG, "device_first_ready");
     // start heartbeat task every 30 seconds
     xTaskCreate(heartbeat_task, "heartbeat_task", 1024 * 4, NULL, 10, NULL);
@@ -115,15 +136,7 @@ void device_first_ready(void)
     #endif
 }
 
-static void heartbeat_task(void)
-{
-    // report device_type every 30 seconds
-    while(1) {
-        report_all_properties();
-        // print the time since boot
-        vTaskDelay(pdMS_TO_TICKS(10000));
-    }
-}
+
 
 static void sleep_check_task(void){
     while(1) {
@@ -145,6 +158,7 @@ static void sleep_check_task(void){
 }
 
 static void report_all_properties(void){
+    if (g_device_mode == MODE_BLE) return;
     ESP_LOGI(TAG, "report_all_properties num: %d", device_properties_num);
     // build json
     cJSON *root = cJSON_CreateObject();
@@ -284,7 +298,7 @@ void mqtt_msg_process(char *topic, int topic_len, char *data, int data_len)
     on_mqtt_msg_process(topic, root);
     // free cJSON
     cJSON_Delete(root);
-    last_msg_time = esp_timer_get_time() / 1000000;
+    update_last_msg_time();
 }
 
 void set_property(char *property_name, cJSON *property_value, int msg_id)
@@ -370,4 +384,41 @@ void mqtt_publish(cJSON *root){
     esp_mqtt_client_publish(smqtt_client, publish_topic, json_data, 0, 1, 0);
     cJSON_Delete(root);
     free(json_data);
+}
+
+void device_update_property_int(const char *name, int v){
+    int i = -1;
+    for (int k = 0; k < device_properties_num; k++){
+        if (strcmp(device_properties[k]->name, name) == 0){ i = k; break; }
+    }
+    if (i < 0) return;
+    device_properties[i]->value.int_value = v;
+    if(g_device_mode == MODE_BLE){
+        // device_ble_update_property(i);
+    }
+}
+
+void device_update_property_float(const char *name, float v){
+    int i = -1;
+    for (int k = 0; k < device_properties_num; k++){
+        if (strcmp(device_properties[k]->name, name) == 0){ i = k; break; }
+    }
+    if (i < 0) return;
+    device_properties[i]->value.float_value = v;
+    if(g_device_mode == MODE_BLE){
+        // device_ble_update_property(i);
+    }
+}
+
+void device_update_property_string(const char *name, const char *v){
+    int i = -1;
+    for (int k = 0; k < device_properties_num; k++){
+        if (strcmp(device_properties[k]->name, name) == 0){ i = k; break; }
+    }
+    if (i < 0) return;
+    strncpy(device_properties[i]->value.string_value, v, PROPERTY_VALUE_MAX - 1);
+    device_properties[i]->value.string_value[PROPERTY_VALUE_MAX - 1] = 0;
+    if(g_device_mode == MODE_BLE){
+        // device_ble_update_property(i);
+    }
 }
