@@ -27,6 +27,7 @@
 
 #include "esp_blufi_api.h"
 #include "blufi_example.h"
+#include "device_common.h" // device_mode_t相关定义
 
 #include "esp_blufi.h"
 #include "mqtt_client.h"
