@@ -12,7 +12,7 @@
 import asyncio
 from bleak import BleakScanner, BleakClient
 
-DEVICE_NAME = "你的设备名关键词"  # 按需修改
+DEVICE_NAME = "BLUFI"
 
 async def main():
     devices = await BleakScanner.discover()
@@ -53,24 +53,25 @@ asyncio.run(main())
 import asyncio, struct
 from bleak import BleakScanner, BleakClient
 
-DEVICE_NAME = "你的设备名关键词"
+DEVICE_NAME = "BLUFI"
 
-async def find_char_by_desc(client, desc_text):
+async def build_attr_map(client):
+    m = {}
     for s in client.services:
         for c in s.characteristics:
             for d in c.descriptors:
                 if d.uuid.endswith("2901"):
-                    name = await client.read_gatt_descriptor(d.handle)
-                    if name.decode().strip() == desc_text:
-                        return c.uuid
-    return None
+                    name = (await client.read_gatt_descriptor(d.handle)).decode().strip()
+                    m[name] = c.uuid
+    return m
 
 async def main():
     devices = await BleakScanner.discover()
     target = next(d for d in devices if (d.name or "") and DEVICE_NAME in d.name)
     async with BleakClient(target.address) as client:
-        voltage_uuid = await find_char_by_desc(client, "voltage")
-        shock_uuid = await find_char_by_desc(client, "shock")
+        attr = await build_attr_map(client)
+        voltage_uuid = attr["voltage"]
+        shock_uuid = attr["shock"]
 
         await client.write_gatt_char(voltage_uuid, struct.pack("<i", 50), response=True)
         await client.write_gatt_char(shock_uuid, bytes([1]), response=True)
