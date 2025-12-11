@@ -5,6 +5,7 @@
 #include "driver/ledc.h"
 #include "esp_timer.h"
 #include "device_common.h"
+#include "base_device.h"
 #include "cJSON.h"
 #include "esp_adc/adc_oneshot.h"
 #include "esp_adc/adc_cali.h"

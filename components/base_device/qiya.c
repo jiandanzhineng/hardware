@@ -1,5 +1,6 @@
 #include "esp_log.h"
 #include "device_common.h"
+#include "base_device.h"
 #include "mqtt_client.h"
 #include "cJSON.h"
 #include "esp_timer.h"
@@ -36,8 +37,7 @@ device_property_t *device_properties[] = {
 };
 int device_properties_num = sizeof(device_properties) / sizeof(device_properties[0]);
 
-extern void get_property(char *property_name, int msg_id);
-extern void mqtt_publish(cJSON *root);
+ 
 
 float current_pressure = 0.0;
 float current_temperature = 0.0;

@@ -342,6 +342,7 @@ void set_property(char *property_name, cJSON *property_value, int msg_id)
 
 void get_property(char *property_name, int msg_id)
 {
+    if(g_device_mode == MODE_BLE) return;
     ESP_LOGI(TAG, "get_property property_name: %s", property_name);
     // if property_name is device_type, then publish device_type
     device_property_t *property = NULL;

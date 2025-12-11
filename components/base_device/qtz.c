@@ -4,11 +4,12 @@
 #include "driver/ledc.h"
 #include "esp_timer.h"
 #include "device_common.h"
+#include "base_device.h"
 #include "mqtt_client.h"
 #include "cJSON.h"
 #include "driver/i2c.h"
 #include "esp_system.h"
-
+ 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
@@ -175,7 +176,6 @@ static uint16_t vl6180x_read_range_single_millimeters(void);
 static void vl6180x_set_timeout(uint32_t timeout);
 static bool vl6180x_timeout_occurred(void);
 
-static void report_distance_task(void);
 static void check_distance_task(void);
 
 // 按钮回调函数声明
@@ -228,7 +228,6 @@ void on_device_first_ready(void)
     vl6180x_set_timeout(500);
     ESP_LOGI(TAG, "设置超时为500ms");
     xTaskCreate(check_distance_task, "check_distance_task", 1024 * 2, NULL, 10, NULL);
-    xTaskCreate(report_distance_task, "report_distance_task", 1024 * 2, NULL, 10, NULL);
 }
 
 // I2C写入16位寄存器
@@ -319,16 +318,7 @@ static esp_err_t i2c_master_init(void)
     return i2c_driver_install(I2C_MASTER_NUM, conf.mode, I2C_MASTER_RX_BUF_DISABLE, I2C_MASTER_TX_BUF_DISABLE, 0);
 }
 
-static void report_distance_task(void)
-{
-    // report distance every report_delay_ms
-    int fail_num = 0;
-    while (1)
-    {
-        get_property("distance", 0);
-        vTaskDelay(pdMS_TO_TICKS(report_delay_ms_property.value.int_value));
-    }
-}
+ 
 
 // VL6180X传感器初始化
 static esp_err_t vl6180x_init(void)
@@ -527,21 +517,29 @@ static bool vl6180x_timeout_occurred(void)
 
 static void check_distance_task(void)
 {
-    // 使用VL6180X传感器持续读取距离
+    const TickType_t slice = pdMS_TO_TICKS(100);
     while (1)
     {
+        TickType_t start = xTaskGetTickCount();
         uint16_t distance = vl6180x_read_range_single_millimeters();
-        
         if (vl6180x_timeout_occurred()) {
             ESP_LOGE(VL6180X_TAG, "传感器超时");
         } else {
             device_update_property_float("distance", (float)distance);
             average_length_mm = distance_property.value.float_value;
-            //ESP_LOGI(VL6180X_TAG, "距离: %.2f mm 平均:%.2f mm", distance_property.value.float_value, average_length_mm);
             update_in_state();
         }
+        get_property("distance", 0);
+
         
-        vTaskDelay(pdMS_TO_TICKS(100));  // 100ms延迟
+        while (1) {
+            TickType_t elapsed = xTaskGetTickCount() - start;
+            TickType_t required = pdMS_TO_TICKS(report_delay_ms_property.value.int_value);
+            if (elapsed >= required) break;
+            TickType_t step = required - elapsed;
+            if (step > slice) step = slice;
+            vTaskDelay(step);
+        }
     }
 }
 
