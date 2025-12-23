@@ -32,7 +32,7 @@ import asyncio
 from bleak import BleakScanner, BleakClient
 
 MODE_UUID = "0000ff02-0000-1000-8000-00805f9b34fb"
-DEVICE_NAME = "你的设备名关键词"
+DEVICE_NAME = "BLUFI"
 
 async def main():
     devices = await BleakScanner.discover()

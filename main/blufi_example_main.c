@@ -149,6 +149,7 @@ static void default_wifi_attempt_task(void *arg)
 
         // If already connected and/or got IP, skip
         if (gl_sta_connected || (bits & CONNECTED_BIT)) {
+            BLUFI_INFO("WiFi already connected or got IP; skip default WiFi attempt\n");
             vTaskDelete(NULL);
             return;
         }
