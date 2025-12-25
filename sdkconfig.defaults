@@ -2,10 +2,22 @@
 # in this example
 
 #
+# Serial Flasher Config
+#
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+
+#
 # Partition Table
-# (It's possible to fit Blufi in 1MB app partition size with some other optimizations, but
-# default config is close to 1MB.)
-CONFIG_PARTITION_TABLE_SINGLE_APP_LARGE=y
+# Use Custom Partition Table
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+# CONFIG_PARTITION_TABLE_TWO_OTA is not set
+# CONFIG_PARTITION_TABLE_SINGLE_APP_LARGE is not set
+
+# OTA Config
+CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
+CONFIG_APP_UPDATE_CHECK_APP_VALIDITY=y
+CONFIG_ESP_HTTPS_OTA_ALLOW_HTTP=y
 
 #
 # BT config

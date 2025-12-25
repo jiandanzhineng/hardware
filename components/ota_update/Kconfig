@@ -1,0 +1,17 @@
+menu "OTA Configuration"
+
+    config OTA_SERVER_URL
+        string "Firmware Update Server URL"
+        default "http://192.168.1.100:8000"
+        help
+            Base URL where version.json and firmware.bin are hosted.
+            Example: http://myserver.com/ota
+
+    config OTA_CHECK_INTERVAL_SEC
+        int "Auto Check Interval (seconds)"
+        default 86400
+        help
+            How often to check for updates automatically (in seconds).
+            Default is 24 hours (86400).
+
+endmenu

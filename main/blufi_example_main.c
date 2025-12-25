@@ -34,6 +34,7 @@
 #include "cJSON.h"
 #include "esp_mac.h"
 #include "device_ble_service.h"
+#include "ota_update.h"
 
 // self make header
 #include "smqtt.h"
@@ -216,6 +217,7 @@ static void ip_event_handler(void *arg, esp_event_base_t event_base,
         info.sta_ssid = gl_sta_ssid;
         info.sta_ssid_len = gl_sta_ssid_len;
         gl_sta_got_ip = true;
+        // ota_service_init(); // Auto OTA removed
         if (ble_is_connected == true)
         {
             esp_blufi_send_wifi_conn_report(mode, ESP_BLUFI_STA_CONN_SUCCESS, softap_get_current_connection_number(), &info);

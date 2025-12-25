@@ -9,6 +9,7 @@
 #include "device_common.h"
 #include "esp_sleep.h"
 #include "esp_ota_ops.h"
+#include "ota_update.h"
 
 // #include "device_ble_service.h"
 
@@ -290,6 +291,16 @@ void mqtt_msg_process(char *topic, int topic_len, char *data, int data_len)
                     set_property(child->string, child, msg_id);
                 }
                 child = child->next;
+            }
+        }
+        else if (strcmp(method, "ota_update") == 0)
+        {
+            ESP_LOGI(TAG, "Received OTA update command");
+            if (cJSON_GetObjectItem(root, "url")) {
+                char *url = cJSON_GetObjectItem(root, "url")->valuestring;
+                ota_perform_update(url);
+            } else {
+                ESP_LOGW(TAG, "OTA update command missing URL");
             }
         }
         else{
