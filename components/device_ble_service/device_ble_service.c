@@ -10,17 +10,24 @@
 #include "device_common.h"
 #include "base_device.h"
 #include "esp_wifi.h"
+#include "ble_ota.h"
 
 #define TAG "DEVICE_BLE"
 
 #define SERVICE_UUID        0x00FF
 #define CHAR_UUID           0xFF01
 #define MODE_CHAR_UUID      0xFF02
+#define OTA_SVC_UUID        0x8010
+#define OTA_CHAR_CMD_UUID   0x8011
+#define OTA_CHAR_DATA_UUID  0x8012
 #define APP_ID              1
 
 static esp_gatts_attr_db_t *gatt_db = NULL;
+static esp_gatts_attr_db_t *gatt_db_ota = NULL;
 static uint16_t *handle_table = NULL;
+static uint16_t *handle_table_ota = NULL;
 static int total_attr_count = 0;
+static int ota_attr_count = 6; // OTA Service has 6 attributes
 static int base_attr_count = 5;
 static esp_gatt_if_t s_gatts_if = 0;
 static int conn_id_last = -1;
@@ -45,7 +52,21 @@ static const uint8_t char_value[1] = {0x00};
 static const uint16_t mode_char_uuid = MODE_CHAR_UUID;
 static uint8_t mode_value[1] = {0x00};
 
+static const uint16_t ota_service_uuid = OTA_SVC_UUID;
+static const uint16_t ota_char_cmd_uuid = OTA_CHAR_CMD_UUID;
+static const uint16_t ota_char_data_uuid = OTA_CHAR_DATA_UUID;
+static uint8_t ota_val_cmd[20] = {0};
+static uint8_t ota_val_data[512] = {0};
+static uint8_t ota_cccd[2] = {0};
+static int ota_idx_cmd = 2; // Offset in OTA table
+static int ota_idx_data = 5; // Offset in OTA table
+static uint16_t ota_handle_cmd = 0;
+static uint16_t ota_handle_data = 0;
+
 static void build_gatt_table(void) {
+    ESP_LOGI(TAG, "Building GATT table. Device Properties Num: %d", device_properties_num);
+    
+    // --- 1. Build Device Service Table ---
     int include_count = 0;
     for (int i = 0; i < device_properties_num; i++) {
         device_property_t *p = device_properties[i];
@@ -59,9 +80,13 @@ static void build_gatt_table(void) {
             if (p->readable) extra_cccd++;
         }
     }
-    total_attr_count = base_attr_count + props * 2 + extra_cccd + props; // Add props count for User Description
+    total_attr_count = base_attr_count + props * 2 + extra_cccd + props; 
+    ESP_LOGI(TAG, "Total Attr Count: %d", total_attr_count);
+
     gatt_db = (esp_gatts_attr_db_t *)malloc(sizeof(esp_gatts_attr_db_t) * total_attr_count);
     handle_table = (uint16_t *)malloc(sizeof(uint16_t) * total_attr_count);
+    
+    // Allocate buffers for properties
     prop_value_index = (int *)malloc(sizeof(int) * device_properties_num);
     prop_cccd_index = (int *)malloc(sizeof(int) * device_properties_num);
     prop_value_buf = (uint8_t **)malloc(sizeof(uint8_t *) * device_properties_num);
@@ -71,6 +96,7 @@ static void build_gatt_table(void) {
     prop_notify_enabled = (uint8_t *)malloc(sizeof(uint8_t) * device_properties_num);
     prop_uuid16_arr = (uint16_t *)malloc(sizeof(uint16_t) * device_properties_num);
     prop_char_props_arr = (uint8_t *)malloc(sizeof(uint8_t) * device_properties_num);
+    
     for (int i = 0; i < device_properties_num; i++) {
         prop_value_index[i] = -1;
         prop_cccd_index[i] = -1;
@@ -84,6 +110,7 @@ static void build_gatt_table(void) {
     }
 
     int idx = 0;
+    // Service Declaration
     gatt_db[idx].attr_control.auto_rsp = ESP_GATT_AUTO_RSP;
     gatt_db[idx].att_desc.uuid_length = ESP_UUID_LEN_16;
     gatt_db[idx].att_desc.uuid_p = (uint8_t *)&primary_service_uuid;
@@ -93,6 +120,7 @@ static void build_gatt_table(void) {
     gatt_db[idx].att_desc.value = (uint8_t *)&service_uuid;
     idx++;
 
+    // Char Decl (FF01)
     gatt_db[idx].attr_control.auto_rsp = ESP_GATT_AUTO_RSP;
     gatt_db[idx].att_desc.uuid_length = ESP_UUID_LEN_16;
     gatt_db[idx].att_desc.uuid_p = (uint8_t *)&character_declaration_uuid;
@@ -102,6 +130,7 @@ static void build_gatt_table(void) {
     gatt_db[idx].att_desc.value = (uint8_t *)&char_prop_write;
     idx++;
 
+    // Char Value (FF01)
     gatt_db[idx].attr_control.auto_rsp = ESP_GATT_AUTO_RSP;
     gatt_db[idx].att_desc.uuid_length = ESP_UUID_LEN_16;
     gatt_db[idx].att_desc.uuid_p = (uint8_t *)&char_uuid;
@@ -111,6 +140,7 @@ static void build_gatt_table(void) {
     gatt_db[idx].att_desc.value = (uint8_t *)char_value;
     idx++;
 
+    // Char Decl (FF02 - Mode)
     gatt_db[idx].attr_control.auto_rsp = ESP_GATT_AUTO_RSP;
     gatt_db[idx].att_desc.uuid_length = ESP_UUID_LEN_16;
     gatt_db[idx].att_desc.uuid_p = (uint8_t *)&character_declaration_uuid;
@@ -120,6 +150,7 @@ static void build_gatt_table(void) {
     gatt_db[idx].att_desc.value = (uint8_t *)&char_prop_write;
     idx++;
 
+    // Char Value (FF02)
     gatt_db[idx].attr_control.auto_rsp = ESP_GATT_AUTO_RSP;
     gatt_db[idx].att_desc.uuid_length = ESP_UUID_LEN_16;
     gatt_db[idx].att_desc.uuid_p = (uint8_t *)&mode_char_uuid;
@@ -129,14 +160,17 @@ static void build_gatt_table(void) {
     gatt_db[idx].att_desc.value = (uint8_t *)mode_value;
     idx++;
 
+    // Properties
     for (int i = 0; i < device_properties_num; i++) {
         device_property_t *p = device_properties[i];
         if (!(p->readable || p->writeable)) continue;
+        
         uint8_t props = 0;
         if (p->readable) props |= ESP_GATT_CHAR_PROP_BIT_READ | ESP_GATT_CHAR_PROP_BIT_NOTIFY;
         if (p->writeable) props |= ESP_GATT_CHAR_PROP_BIT_WRITE;
         prop_char_props_arr[i] = props;
 
+        // Char Decl
         gatt_db[idx].attr_control.auto_rsp = ESP_GATT_AUTO_RSP;
         gatt_db[idx].att_desc.uuid_length = ESP_UUID_LEN_16;
         gatt_db[idx].att_desc.uuid_p = (uint8_t *)&character_declaration_uuid;
@@ -150,6 +184,7 @@ static void build_gatt_table(void) {
         if (p->readable) perm |= ESP_GATT_PERM_READ;
         if (p->writeable) perm |= ESP_GATT_PERM_WRITE;
 
+        // Prop Value handling
         uint16_t maxlen = 0;
         uint16_t curlen = 0;
         if (p->value_type == PROPERTY_TYPE_INT) {
@@ -177,6 +212,7 @@ static void build_gatt_table(void) {
         prop_value_len[i] = curlen;
         prop_value_maxlen[i] = maxlen;
 
+        // Char Value
         gatt_db[idx].attr_control.auto_rsp = ESP_GATT_AUTO_RSP;
         gatt_db[idx].att_desc.uuid_length = ESP_UUID_LEN_16;
         gatt_db[idx].att_desc.uuid_p = (uint8_t *)&prop_uuid16_arr[i];
@@ -187,6 +223,7 @@ static void build_gatt_table(void) {
         prop_value_index[i] = idx;
         idx++;
 
+        // CCCD
         if (p->readable) {
             static const uint16_t cccd_uuid = ESP_GATT_UUID_CHAR_CLIENT_CONFIG;
             prop_cccd_buf[i] = (uint8_t *)malloc(2);
@@ -203,6 +240,7 @@ static void build_gatt_table(void) {
             idx++;
         }
 
+        // User Desc
         static const uint16_t user_desc_uuid = ESP_GATT_UUID_CHAR_DESCRIPTION;
         gatt_db[idx].attr_control.auto_rsp = ESP_GATT_AUTO_RSP;
         gatt_db[idx].att_desc.uuid_length = ESP_UUID_LEN_16;
@@ -213,6 +251,78 @@ static void build_gatt_table(void) {
         gatt_db[idx].att_desc.value = (uint8_t *)p->name;
         idx++;
     }
+
+    // --- 2. Build OTA Service Table ---
+    ESP_LOGI(TAG, "Building OTA GATT table...");
+    gatt_db_ota = (esp_gatts_attr_db_t *)malloc(sizeof(esp_gatts_attr_db_t) * ota_attr_count);
+    handle_table_ota = (uint16_t *)malloc(sizeof(uint16_t) * ota_attr_count);
+    
+    int ota_idx = 0;
+    
+    // OTA Service Declaration
+    gatt_db_ota[ota_idx].attr_control.auto_rsp = ESP_GATT_AUTO_RSP;
+    gatt_db_ota[ota_idx].att_desc.uuid_length = ESP_UUID_LEN_16;
+    gatt_db_ota[ota_idx].att_desc.uuid_p = (uint8_t *)&primary_service_uuid;
+    gatt_db_ota[ota_idx].att_desc.perm = ESP_GATT_PERM_READ;
+    gatt_db_ota[ota_idx].att_desc.max_length = sizeof(uint16_t);
+    gatt_db_ota[ota_idx].att_desc.length = sizeof(ota_service_uuid);
+    gatt_db_ota[ota_idx].att_desc.value = (uint8_t *)&ota_service_uuid;
+    ota_idx++;
+
+    // OTA CMD Char Declaration
+    static const uint8_t char_prop_ota_cmd = ESP_GATT_CHAR_PROP_BIT_WRITE | ESP_GATT_CHAR_PROP_BIT_NOTIFY;
+    gatt_db_ota[ota_idx].attr_control.auto_rsp = ESP_GATT_AUTO_RSP;
+    gatt_db_ota[ota_idx].att_desc.uuid_length = ESP_UUID_LEN_16;
+    gatt_db_ota[ota_idx].att_desc.uuid_p = (uint8_t *)&character_declaration_uuid;
+    gatt_db_ota[ota_idx].att_desc.perm = ESP_GATT_PERM_READ;
+    gatt_db_ota[ota_idx].att_desc.max_length = sizeof(uint8_t);
+    gatt_db_ota[ota_idx].att_desc.length = sizeof(uint8_t);
+    gatt_db_ota[ota_idx].att_desc.value = (uint8_t *)&char_prop_ota_cmd;
+    ota_idx++;
+
+    // OTA CMD Value
+    gatt_db_ota[ota_idx].attr_control.auto_rsp = ESP_GATT_AUTO_RSP;
+    gatt_db_ota[ota_idx].att_desc.uuid_length = ESP_UUID_LEN_16;
+    gatt_db_ota[ota_idx].att_desc.uuid_p = (uint8_t *)&ota_char_cmd_uuid;
+    gatt_db_ota[ota_idx].att_desc.perm = ESP_GATT_PERM_WRITE | ESP_GATT_PERM_READ;
+    gatt_db_ota[ota_idx].att_desc.max_length = sizeof(ota_val_cmd);
+    gatt_db_ota[ota_idx].att_desc.length = sizeof(ota_val_cmd);
+    gatt_db_ota[ota_idx].att_desc.value = ota_val_cmd;
+    ota_idx_cmd = ota_idx; // Save index relative to OTA table
+    ota_idx++;
+
+    // OTA CMD CCCD
+    static const uint16_t cccd_uuid = ESP_GATT_UUID_CHAR_CLIENT_CONFIG;
+    gatt_db_ota[ota_idx].attr_control.auto_rsp = ESP_GATT_AUTO_RSP;
+    gatt_db_ota[ota_idx].att_desc.uuid_length = ESP_UUID_LEN_16;
+    gatt_db_ota[ota_idx].att_desc.uuid_p = (uint8_t *)&cccd_uuid;
+    gatt_db_ota[ota_idx].att_desc.perm = ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE;
+    gatt_db_ota[ota_idx].att_desc.max_length = sizeof(ota_cccd);
+    gatt_db_ota[ota_idx].att_desc.length = sizeof(ota_cccd);
+    gatt_db_ota[ota_idx].att_desc.value = ota_cccd;
+    ota_idx++;
+
+    // OTA DATA Char Declaration
+    static const uint8_t char_prop_ota_data = ESP_GATT_CHAR_PROP_BIT_WRITE | ESP_GATT_CHAR_PROP_BIT_WRITE_NR;
+    gatt_db_ota[ota_idx].attr_control.auto_rsp = ESP_GATT_AUTO_RSP;
+    gatt_db_ota[ota_idx].att_desc.uuid_length = ESP_UUID_LEN_16;
+    gatt_db_ota[ota_idx].att_desc.uuid_p = (uint8_t *)&character_declaration_uuid;
+    gatt_db_ota[ota_idx].att_desc.perm = ESP_GATT_PERM_READ;
+    gatt_db_ota[ota_idx].att_desc.max_length = sizeof(uint8_t);
+    gatt_db_ota[ota_idx].att_desc.length = sizeof(uint8_t);
+    gatt_db_ota[ota_idx].att_desc.value = (uint8_t *)&char_prop_ota_data;
+    ota_idx++;
+
+    // OTA DATA Value
+    gatt_db_ota[ota_idx].attr_control.auto_rsp = ESP_GATT_AUTO_RSP;
+    gatt_db_ota[ota_idx].att_desc.uuid_length = ESP_UUID_LEN_16;
+    gatt_db_ota[ota_idx].att_desc.uuid_p = (uint8_t *)&ota_char_data_uuid;
+    gatt_db_ota[ota_idx].att_desc.perm = ESP_GATT_PERM_WRITE;
+    gatt_db_ota[ota_idx].att_desc.max_length = sizeof(ota_val_data);
+    gatt_db_ota[ota_idx].att_desc.length = sizeof(ota_val_data);
+    gatt_db_ota[ota_idx].att_desc.value = ota_val_data;
+    ota_idx_data = ota_idx; // Save index relative to OTA table
+    ota_idx++;
 }
 
 static void gatts_profile_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t *param) {
@@ -223,21 +333,70 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_
             s_gatts_if = gatts_if;
             if (param->reg.app_id == APP_ID) {
                 build_gatt_table();
+                // Create Device Service
                 esp_ble_gatts_create_attr_tab(gatt_db, gatts_if, total_attr_count, 0);
+                // Create OTA Service
+                esp_ble_gatts_create_attr_tab(gatt_db_ota, gatts_if, ota_attr_count, 1);
             }
             break;
         case ESP_GATTS_CREAT_ATTR_TAB_EVT:
-            ESP_LOGI(TAG, "ESP_GATTS_CREAT_ATTR_TAB_EVT, status = %d, num_handle = %d", param->add_attr_tab.status, param->add_attr_tab.num_handle);
-            if (param->add_attr_tab.status == ESP_GATT_OK && param->add_attr_tab.num_handle == total_attr_count) {
-                memcpy(handle_table, param->add_attr_tab.handles, sizeof(uint16_t) * total_attr_count);
-                esp_ble_gatts_start_service(handle_table[0]);
+            ESP_LOGI(TAG, "ESP_GATTS_CREAT_ATTR_TAB_EVT, status = %d, num_handle = %d, svc_inst_id = %d", 
+                     param->add_attr_tab.status, param->add_attr_tab.num_handle, param->add_attr_tab.svc_inst_id);
+            
+            if (param->add_attr_tab.status == ESP_GATT_OK) {
+                if (param->add_attr_tab.svc_inst_id == 0) { // Device Service
+                    if (param->add_attr_tab.num_handle == total_attr_count) {
+                        memcpy(handle_table, param->add_attr_tab.handles, sizeof(uint16_t) * total_attr_count);
+                        esp_ble_gatts_start_service(handle_table[0]);
+                        ESP_LOGI(TAG, "Device Service started at handle %d", handle_table[0]);
+                    } else {
+                        ESP_LOGE(TAG, "Device Service handle count mismatch: %d != %d", param->add_attr_tab.num_handle, total_attr_count);
+                    }
+                } else if (param->add_attr_tab.svc_inst_id == 1) { // OTA Service
+                    if (param->add_attr_tab.num_handle == ota_attr_count) {
+                        memcpy(handle_table_ota, param->add_attr_tab.handles, sizeof(uint16_t) * ota_attr_count);
+                        esp_ble_gatts_start_service(handle_table_ota[0]);
+                        
+                        ota_handle_cmd = handle_table_ota[ota_idx_cmd];
+                        ota_handle_data = handle_table_ota[ota_idx_data];
+                        ESP_LOGI(TAG, "OTA Service started at handle %d. CMD Handle: %d, DATA Handle: %d", 
+                                 handle_table_ota[0], ota_handle_cmd, ota_handle_data);
+                    } else {
+                        ESP_LOGE(TAG, "OTA Service handle count mismatch: %d != %d", param->add_attr_tab.num_handle, ota_attr_count);
+                    }
+                }
             } else {
                 ESP_LOGE(TAG, "Create attribute table failed, error code = %x", param->add_attr_tab.status);
             }
             break;
+        case ESP_GATTS_CONNECT_EVT:
+            ESP_LOGI(TAG, "ESP_GATTS_CONNECT_EVT, conn_id = %d", param->connect.conn_id);
+            conn_id_last = param->connect.conn_id;
+            ble_ota_set_params(gatts_if, param->connect.conn_id, ota_handle_cmd);
+            break;
+        case ESP_GATTS_DISCONNECT_EVT:
+            ESP_LOGI(TAG, "ESP_GATTS_DISCONNECT_EVT");
+            conn_id_last = -1;
+            ble_ota_set_params(gatts_if, 0xffff, 0);
+            break;
         case ESP_GATTS_WRITE_EVT:
             ESP_LOGI(TAG, "ESP_GATTS_WRITE_EVT, conn_id = %d, handle = %d, len = %d", param->write.conn_id, param->write.handle, param->write.len);
+            ESP_LOGI(TAG, "Debug Handles - OTA CMD: %d, OTA DATA: %d", ota_handle_cmd, ota_handle_data);
+
             conn_id_last = param->write.conn_id;
+            
+            // Handle OTA
+            if (param->write.handle == ota_handle_cmd) {
+                ble_ota_handle_command(param->write.value, param->write.len);
+                return;
+            } else if (param->write.handle == ota_handle_data) {
+                ble_ota_handle_data(param->write.value, param->write.len);
+                return;
+            }
+            
+            // Handle Device Service
+            if (handle_table == NULL) return; // Safety check
+
             if (handle_table[2] == param->write.handle) {
                 ESP_LOGI(TAG, "Received %d bytes:", param->write.len);
                 esp_log_buffer_hex(TAG, param->write.value, param->write.len);
@@ -365,4 +524,3 @@ void device_ble_update_property(int i){
         }
     }
 }
-

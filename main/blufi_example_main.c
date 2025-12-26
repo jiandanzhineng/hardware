@@ -34,6 +34,7 @@
 #include "cJSON.h"
 #include "esp_mac.h"
 #include "device_ble_service.h"
+#include "ble_ota.h"
 #include "ota_update.h"
 
 // self make header
@@ -650,7 +651,7 @@ void app_main(void)
     device_init();
 
     device_ble_service_init();
-
+    
     while (1)
     {
         vTaskDelay(1000 / portTICK_PERIOD_MS);

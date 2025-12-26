@@ -1,5 +1,6 @@
 # Python virtual device dependencies
 paho-mqtt>=1.6.0
+bleak>=0.20.0
 
 # GUI controller dependencies (tkinter is included in Python standard library)
 # For advanced GUI features, consider adding:
