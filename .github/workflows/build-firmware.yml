@@ -35,8 +35,8 @@ jobs:
 
     - name: Configure device type
       run: |
-        # 复制默认配置
-        cp sdkconfig.defaults.esp32c3 sdkconfig
+        # 合并默认配置 (包含分区表配置)
+        cat sdkconfig.defaults sdkconfig.defaults.esp32c3 > sdkconfig
         
         # 启用当前设备类型
         echo "${{ matrix.device_config.config }}" >> sdkconfig
@@ -51,15 +51,19 @@ jobs:
         esp_idf_version: v5.2.3
         target: esp32c3
         path: '.'
-        command: 'idf.py build && cd build && esptool.py --chip esp32c3 merge_bin -o blufi_demo_${{ matrix.device_config.name }}_merged.bin @flash_args'
+        command: >
+          idf.py build && 
+          cd build && 
+          esptool.py --chip esp32c3 merge_bin -o blufi_demo_${{ matrix.device_config.name }}_${{ github.ref_name }}_merged.bin @flash_args && 
+          mv blufi_demo.bin blufi_demo_${{ matrix.device_config.name }}_${{ github.ref_name }}.bin
 
     - name: Upload firmware artifact
       uses: actions/upload-artifact@v4
       with:
         name: firmware-${{ matrix.device_config.name }}
         path: |
-          build/blufi_demo_${{ matrix.device_config.name }}_merged.bin
-          build/blufi_demo.bin
+          build/blufi_demo_${{ matrix.device_config.name }}_${{ github.ref_name }}_merged.bin
+          build/blufi_demo_${{ matrix.device_config.name }}_${{ github.ref_name }}.bin
           build/bootloader/bootloader.bin
           build/partition_table/partition-table.bin
         retention-days: 30
@@ -87,13 +91,7 @@ jobs:
       if: startsWith(github.ref, 'refs/tags/')
       with:
         files: |
-          firmware-files/firmware-TD01/blufi_demo_TD01_merged.bin
-          firmware-files/firmware-DIANJI/blufi_demo_DIANJI_merged.bin
-          firmware-files/firmware-QTZ/blufi_demo_QTZ_merged.bin
-          firmware-files/firmware-ZIDONGSUO/blufi_demo_ZIDONGSUO_merged.bin
-          firmware-files/firmware-PJ01/blufi_demo_PJ01_merged.bin
-          firmware-files/firmware-QIYA/blufi_demo_QIYA_merged.bin
-          firmware-files/firmware-DZC01/blufi_demo_DZC01_merged.bin
+          firmware-files/firmware-*/blufi_demo_*.bin
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -104,10 +102,13 @@ jobs:
         echo "Built firmware for the following device types:" >> firmware_summary.md
         echo "" >> firmware_summary.md
         for device in TD01 DIANJI QTZ ZIDONGSUO PJ01 QIYA DZC01; do
-          if [ -f "firmware-files/firmware-${device}/blufi_demo_${device}_merged.bin" ]; then
-            size=$(stat -c%s "firmware-files/firmware-${device}/blufi_demo_${device}_merged.bin" 2>/dev/null || echo "Unknown")
-            echo "- **${device}**: blufi_demo_${device}_merged.bin (${size} bytes)" >> firmware_summary.md
-          fi
+          for file in firmware-files/firmware-${device}/blufi_demo_*.bin; do
+            if [ -f "$file" ]; then
+              filename=$(basename "$file")
+              size=$(stat -c%s "$file" 2>/dev/null || echo "Unknown")
+              echo "- **${device}**: ${filename} (${size} bytes)" >> firmware_summary.md
+            fi
+          done
         done
         
         cat firmware_summary.md
