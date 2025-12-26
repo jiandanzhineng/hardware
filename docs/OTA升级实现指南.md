@@ -1,12 +1,12 @@
 # OTA升级实现指南（ESP32C3 / ESP-IDF 5.x）
 
-本文面向本项目 `blufi_demo`，指导如何为设备增加可靠、安全、可观测的 OTA（Over‑The‑Air）升级能力，并与现有 BLUFI 配网与 MQTT 通信框架整合。
+本文面向本项目 `under_silicon`，指导如何为设备增加可靠、安全、可观测的 OTA（Over‑The‑Air）升级能力，并与现有 BLUFI 配网与 MQTT 通信框架整合。
 
 ## 背景与现状
 
 - 设备通过 BLUFI 配网（`main/`）接入 Wi‑Fi，联网后启动 MQTT（`components/smqtt`），订阅 `/all` 与 `/drecv/{mac}`，上报到 `/dpub/{mac}`。
 - 设备属性、心跳与动作处理集中在 `components/base_device`，每 10s 上报一次心跳（`report_all_properties()`）。
-- CI 会构建并发布固件（见 `.github/workflows/build-firmware.yml`）。当前 Release 仅上传了 `*_merged.bin`（合并镜像）。OTA 应使用「应用镜像」`blufi_demo.bin`，而非合并镜像。
+- CI 会构建并发布固件（见 `.github/workflows/build-firmware.yml`）。当前 Release 仅上传了 `*_merged.bin`（合并镜像）。OTA 应使用「应用镜像」`under_silicon.bin`，而非合并镜像。
 
 ## 整体方案
 
@@ -38,14 +38,14 @@
 
   ```cmake
   # 项目根 CMakeLists.txt
-  project(blufi_demo VERSION 1.2.3)
+  project(under_silicon VERSION 1.2.3)
   ```
 
   或 CI 传入：`-DPROJECT_VER=${{ github.ref_name }}`（从 tag 推导）。
 
-- 更新 Release 附件，确保上传 `build/blufi_demo.bin`（应用镜像），并建议为不同设备类型生成独立命名：`blufi_demo_<DEVICE>.bin`。
+- 更新 Release 附件，确保上传 `build/under_silicon.bin`（应用镜像），并建议为不同设备类型生成独立命名：`under_silicon_<DEVICE>.bin`。
 
-> 现有 CI 仅上传了 `*_merged.bin`，它包含 bootloader/分区表/应用镜像，不适用于 OTA。请在 Release 步骤中同时上传 `build/blufi_demo.bin`。
+> 现有 CI 仅上传了 `*_merged.bin`，它包含 bootloader/分区表/应用镜像，不适用于 OTA。请在 Release 步骤中同时上传 `build/under_silicon.bin`。
 
 ## 设备端实现步骤
 
@@ -163,7 +163,7 @@ cJSON_AddStringToObject(root, "firmware_version", app->version);
 ```json
 {
   "method": "ota",
-  "url": "https://download.example.com/firmware/blufi_demo_QTZ.bin",
+  "url": "https://download.example.com/firmware/under_silicon_QTZ.bin",
   "version": "1.2.3",
   "sha256": "bdc3e1...", 
   "force": 0,
@@ -183,10 +183,10 @@ cJSON_AddStringToObject(root, "firmware_version", app->version);
 
 ## CI 与发布建议
 
-- 保持现有矩阵构建（各设备类型），但在 Release 附件中增加 `build/blufi_demo.bin`（应用镜像）。
-- 建议命名：`blufi_demo_<DEVICE>.bin`，并在元数据中写入 `PROJECT_VER`（取自 tag）。
+- 保持现有矩阵构建（各设备类型），但在 Release 附件中增加 `build/under_silicon.bin`（应用镜像）。
+- 建议命名：`under_silicon_<DEVICE>.bin`，并在元数据中写入 `PROJECT_VER`（取自 tag）。
 - 以 GitHub Releases 为 OTA 服务器时，URL 示例：
-  `https://github.com/<owner>/<repo>/releases/download/<tag>/blufi_demo_QTZ.bin`
+  `https://github.com/<owner>/<repo>/releases/download/<tag>/under_silicon_QTZ.bin`
 
 ## 安全与可靠性建议
 
@@ -200,7 +200,7 @@ cJSON_AddStringToObject(root, "firmware_version", app->version);
 1. 在 `menuconfig` 启用双 OTA 与回滚，编译并烧录 `factory`。
 2. 通过 BLUFI 配网，设备联上 Wi‑Fi 并启动 MQTT。
 3. 发布一个旧版本（例如 v1.2.2），设备心跳上报 `firmware_version`。
-4. 发布新版本 v1.2.3（上传 `blufi_demo.bin` 到服务器），向 `/drecv/{mac}` 下发 OTA 命令。
+4. 发布新版本 v1.2.3（上传 `under_silicon.bin` 到服务器），向 `/drecv/{mac}` 下发 OTA 命令。
 5. 观察 `/dpub/{mac}` 的 `ota_status` 流程，设备自动重启。
 6. 新版本启动后运行 30–60s，调用 `ota_mark_app_valid()`，心跳中看到 `firmware_version=1.2.3`。
 
@@ -210,7 +210,7 @@ cJSON_AddStringToObject(root, "firmware_version", app->version);
 - 修改：`components/base_device/base_device.c` 的 `mqtt_msg_process()`，增加 `method=ota` 分支。
 - 修改：属性心跳，增加 `firmware_version` 字段。
 - 修改：在设备启动流程（如 `device_first_ready()`）中延迟调用 `ota_mark_app_valid()`。
-- CI：Release 附件增加 `build/blufi_demo.bin`（应用镜像）。
+- CI：Release 附件增加 `build/under_silicon.bin`（应用镜像）。
 
 ---
 

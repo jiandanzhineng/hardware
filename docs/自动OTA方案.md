@@ -72,13 +72,13 @@
 
 ## 4. 验证与测试
 
-1. **部署固件**：将编译好的 `blufi_demo.bin` 放到 HTTP 服务器。
+1. **部署固件**：将编译好的 `under_silicon.bin` 放到 HTTP 服务器。
 2. **发送指令**：
     使用 MQTT 工具发送：
     ```json
     {
         "method": "ota_update",
-        "url": "http://your-server-ip/blufi_demo.bin"
+        "url": "http://your-server-ip/under_silicon.bin"
     }
     ```
 3. **观察日志**：

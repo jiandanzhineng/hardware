@@ -54,16 +54,16 @@ jobs:
         command: >
           idf.py build && 
           cd build && 
-          esptool.py --chip esp32c3 merge_bin -o blufi_demo_${{ matrix.device_config.name }}_${{ github.ref_name }}_merged.bin @flash_args && 
-          mv blufi_demo.bin blufi_demo_${{ matrix.device_config.name }}_${{ github.ref_name }}.bin
+          esptool.py --chip esp32c3 merge_bin -o under_silicon_${{ matrix.device_config.name }}_${{ github.ref_name }}_merged.bin @flash_args && 
+          mv under_silicon.bin under_silicon_${{ matrix.device_config.name }}_${{ github.ref_name }}.bin
 
     - name: Upload firmware artifact
       uses: actions/upload-artifact@v4
       with:
         name: firmware-${{ matrix.device_config.name }}
         path: |
-          build/blufi_demo_${{ matrix.device_config.name }}_${{ github.ref_name }}_merged.bin
-          build/blufi_demo_${{ matrix.device_config.name }}_${{ github.ref_name }}.bin
+          build/under_silicon_${{ matrix.device_config.name }}_${{ github.ref_name }}_merged.bin
+          build/under_silicon_${{ matrix.device_config.name }}_${{ github.ref_name }}.bin
           build/bootloader/bootloader.bin
           build/partition_table/partition-table.bin
         retention-days: 30
@@ -91,7 +91,7 @@ jobs:
       if: startsWith(github.ref, 'refs/tags/')
       with:
         files: |
-          firmware-files/firmware-*/blufi_demo_*.bin
+          firmware-files/firmware-*/under_silicon_*.bin
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -102,7 +102,7 @@ jobs:
         echo "Built firmware for the following device types:" >> firmware_summary.md
         echo "" >> firmware_summary.md
         for device in TD01 DIANJI QTZ ZIDONGSUO PJ01 QIYA DZC01; do
-          for file in firmware-files/firmware-${device}/blufi_demo_*.bin; do
+          for file in firmware-files/firmware-${device}/under_silicon_*.bin; do
             if [ -f "$file" ]; then
               filename=$(basename "$file")
               size=$(stat -c%s "$file" 2>/dev/null || echo "Unknown")
