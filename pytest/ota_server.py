@@ -5,7 +5,7 @@ import socket
 
 # 配置
 PORT = 8080
-DIRECTORY = "ota_firmware"
+DIRECTORY = "pytest\ota_firmware"
 
 def get_ip_address():
     try:
@@ -28,9 +28,6 @@ def run_server():
     if not os.path.exists(DIRECTORY):
         os.makedirs(DIRECTORY)
         print(f"创建目录: {DIRECTORY}")
-        # 创建一个测试文件
-        with open(os.path.join(DIRECTORY, "firmware_v1.bin"), "w") as f:
-            f.write("This is a dummy firmware file for testing.")
 
     # 允许地址重用，防止重启时报端口占用错误
     socketserver.TCPServer.allow_reuse_address = True

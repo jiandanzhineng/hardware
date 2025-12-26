@@ -17,6 +17,14 @@ extern "C" {
  */
 void ota_perform_update(const char *url);
 
+/**
+ * @brief Mark the current running app as valid to cancel rollback
+ * 
+ * This should be called after the device has successfully booted and verified its functionality
+ * (e.g. connected to Wi-Fi/MQTT).
+ */
+void ota_mark_app_valid(void);
+
 #ifdef __cplusplus
 }
 #endif

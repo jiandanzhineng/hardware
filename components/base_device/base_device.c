@@ -127,6 +127,9 @@ void device_first_ready(void)
     ESP_LOGI(TAG, "device_first_ready");
     // start heartbeat task every 30 seconds
     xTaskCreate(heartbeat_task, "heartbeat_task", 1024 * 4, NULL, 10, NULL);
+    
+    // Mark app as valid (if this is a new firmware)
+    ota_mark_app_valid();
 
 #ifdef CONNECTED_LED
     led_constant_on_then_off();
