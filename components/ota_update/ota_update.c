@@ -8,6 +8,7 @@
 #include "esp_ota_ops.h"
 #include "esp_http_client.h"
 #include "esp_https_ota.h"
+#include "esp_crt_bundle.h"
 #include "cJSON.h"
 #include "ota_update.h"
 #include "smqtt.h" // For reporting status
@@ -77,12 +78,13 @@ static void ota_task_entry(void *pvParameter) {
     esp_http_client_config_t config = {
         .url = url,
         //.cert_pem = (char *)server_cert_pem_start, // Add certificate if HTTPS
+        .crt_bundle_attach = esp_crt_bundle_attach,
         .event_handler = _http_event_handler,
         .keep_alive_enable = true,
         .timeout_ms = 30000,
-        .buffer_size = 4096,
+        .buffer_size = 8192,
         .buffer_size_tx = 1024,
-        .skip_cert_common_name_check = true,
+        .skip_cert_common_name_check = false,
     };
 
     esp_https_ota_config_t ota_config = {
