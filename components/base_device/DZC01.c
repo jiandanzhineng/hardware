@@ -391,6 +391,22 @@ static void oled_draw_text_x2_at(int page, int col, const char *text) {
     }
 }
 
+static void oled_draw_text_x2_fixed_at(int page, int col, const char *text, int fixed_chars) {
+    if (!oled_ready || fixed_chars <= 0) return;
+    int c = col;
+    int ended = 0;
+    for (int i = 0; i < fixed_chars; i++) {
+        if (c > 112) break;
+        char ch = ' ';
+        if (text && !ended) {
+            if (text[i] == 0) ended = 1;
+            else ch = text[i];
+        }
+        oled_draw_char_x2(c, page, ch);
+        c += 16;
+    }
+}
+
 static void oled_draw_text_line_at(int page, int col, const char *text) {
     if (!oled_ready || !text) return;
     int c = col;
@@ -399,6 +415,34 @@ static void oled_draw_text_line_at(int page, int col, const char *text) {
         oled_draw_char(c, page, text[i]);
         c += 8;
     }
+}
+
+static void oled_draw_text_line_fixed_at(int page, int col, const char *text, int fixed_chars) {
+    if (!oled_ready || fixed_chars <= 0) return;
+    int c = col;
+    int ended = 0;
+    for (int i = 0; i < fixed_chars; i++) {
+        if (c > 120) break;
+        char ch = ' ';
+        if (text && !ended) {
+            if (text[i] == 0) ended = 1;
+            else ch = text[i];
+        }
+        oled_draw_char(c, page, ch);
+        c += 8;
+    }
+}
+
+static void text_to_fixed8(char out[9], const char *in) {
+    int ended = 0;
+    for (int i = 0; i < 8; i++) {
+        if (in && !ended) {
+            if (in[i] == 0) ended = 1;
+            else { out[i] = in[i]; continue; }
+        }
+        out[i] = ' ';
+    }
+    out[8] = 0;
 }
 
 static void oled_draw_text_line(int line, const char *text) {
@@ -430,36 +474,114 @@ static void weight_task(void *arg) {
 }
 
 static void display_task(void *arg) {
+    int last_on = -1;
+    int last_mode = INT_MIN;
+    int last_weight = INT_MIN;
+    char last_net8[9] = {0};
+    int last_notify_active = -1;
+    char last_notify8[9] = {0};
+    char last_l18[9] = {0};
+    char last_l28[9] = {0};
+
     while (1) {
-        if (display_on_property.value.int_value) {
-            char net[16];
-            if (wifi_connected()) {
-                if (net_ready) strcpy(net, "NET OK"); else strcpy(net, "WIFI OK");
-            } else {
-                strcpy(net, "WIFI NO");
+        int on = display_on_property.value.int_value;
+        if (!on) {
+            if (last_on != 0) {
+                oled_clear();
+                last_mode = INT_MIN;
+                last_weight = INT_MIN;
+                last_net8[0] = 0;
+                last_notify_active = -1;
+                last_notify8[0] = 0;
+                last_l18[0] = 0;
+                last_l28[0] = 0;
             }
-            if (notify_ms_left > 0) { notify_ms_left -= 200; if (notify_ms_left < 0) notify_ms_left = 0; }
+            last_on = 0;
+            vTaskDelay(pdMS_TO_TICKS(200));
+            continue;
+        }
+
+        if (notify_ms_left > 0) {
+            notify_ms_left -= 200;
+            if (notify_ms_left < 0) notify_ms_left = 0;
+        }
+
+        int mode = display_mode_property.value.int_value;
+        int w = weight_property.value.int_value;
+        int notify_active = notify_ms_left > 0;
+
+        char net[16];
+        if (wifi_connected()) {
+            if (net_ready) strcpy(net, "NET OK"); else strcpy(net, "WIFI OK");
+        } else {
+            strcpy(net, "WIFI NO");
+        }
+
+        const char *l1 = line1_text_property.value.string_value[0] ? line1_text_property.value.string_value : "Line1";
+        const char *l2 = line2_text_property.value.string_value[0] ? line2_text_property.value.string_value : "Line2";
+
+        char net8[9];
+        char l18[9];
+        char l28[9];
+        char notify8[9];
+        text_to_fixed8(net8, net);
+        text_to_fixed8(l18, l1);
+        text_to_fixed8(l28, l2);
+        text_to_fixed8(notify8, notify_active ? notify_text : NULL);
+
+        int full_redraw = 0;
+        if (last_on != 1) full_redraw = 1;
+        if (mode != last_mode) full_redraw = 1;
+
+        if (full_redraw) {
             oled_clear();
-            if (display_mode_property.value.int_value == 1) {
+            if (mode == 1) {
                 char big[32];
-                int w = weight_property.value.int_value;
-                snprintf(big, sizeof(big), "%d g", w);
-                oled_draw_text_x2_at(1, 0, big);
-                oled_draw_text_line_at(0, 64, net);
-                if (notify_ms_left > 0) oled_draw_text_line_at(1, 64, notify_text);
-            } else if (display_mode_property.value.int_value == 2) {
-                const char *l1 = line1_text_property.value.string_value[0] ? line1_text_property.value.string_value : "Line1";
-                const char *l2 = line2_text_property.value.string_value[0] ? line2_text_property.value.string_value : "Line2";
+                snprintf(big, sizeof(big), "%d", w);
+                oled_draw_text_x2_fixed_at(1, 0, big, 4);
+                oled_draw_text_line_fixed_at(0, 64, net8, 8);
+                oled_draw_text_line_fixed_at(1, 64, notify8, 8);
+            } else if (mode == 2) {
                 char big[32];
-                int w = weight_property.value.int_value;
-                snprintf(big, sizeof(big), "%d g", w);
-                oled_draw_text_x2_at(1, 0, big);
-                oled_draw_text_line_at(0, 64, l1);
-                oled_draw_text_line_at(1, 64, l2);
-                oled_draw_text_line_at(2, 64, net);
-                if (notify_ms_left > 0) oled_draw_text_line_at(3, 64, notify_text);
+                snprintf(big, sizeof(big), "%d", w);
+                oled_draw_text_x2_fixed_at(1, 0, big, 4);
+                oled_draw_text_line_fixed_at(0, 64, l18, 8);
+                oled_draw_text_line_fixed_at(1, 64, l28, 8);
+                oled_draw_text_line_fixed_at(2, 64, net8, 8);
+                oled_draw_text_line_fixed_at(3, 64, notify8, 8);
+            }
+        } else {
+            if (w != last_weight) {
+                char big[32];
+                snprintf(big, sizeof(big), "%d", w);
+                oled_draw_text_x2_fixed_at(1, 0, big, 4);
+            }
+
+            if (strcmp(net8, last_net8) != 0) {
+                if (mode == 1) oled_draw_text_line_fixed_at(0, 64, net8, 8);
+                else if (mode == 2) oled_draw_text_line_fixed_at(2, 64, net8, 8);
+            }
+
+            if (mode == 2) {
+                if (strcmp(l18, last_l18) != 0) oled_draw_text_line_fixed_at(0, 64, l18, 8);
+                if (strcmp(l28, last_l28) != 0) oled_draw_text_line_fixed_at(1, 64, l28, 8);
+            }
+
+            if (notify_active != last_notify_active || strcmp(notify8, last_notify8) != 0) {
+                if (mode == 1) oled_draw_text_line_fixed_at(1, 64, notify8, 8);
+                else if (mode == 2) oled_draw_text_line_fixed_at(3, 64, notify8, 8);
             }
         }
+
+        last_on = 1;
+        last_mode = mode;
+        last_weight = w;
+        strcpy(last_net8, net8);
+        last_notify_active = notify_active;
+        strcpy(last_notify8, notify8);
+        strcpy(last_l18, l18);
+        strcpy(last_l28, l28);
+
         vTaskDelay(pdMS_TO_TICKS(200));
     }
 }
