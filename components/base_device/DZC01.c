@@ -15,7 +15,7 @@
 static const char *TAG = "DZC01";
 
 // Keys (low level active)
-#define KEY1_GPIO 3
+#define KEY1_GPIO 5
 #define KEY2_GPIO 2
 #define KEY3_GPIO 19
 #define KEY4_GPIO 18
