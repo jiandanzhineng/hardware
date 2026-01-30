@@ -470,20 +470,20 @@ void get_adc(void *arg)
 
 // 函数：根据电压值返回对应的百分比
 int get_battery_percentage(float bat_v) {
-    if (bat_v >= 4.20) return 100;
-    if (bat_v >= 4.06) return 90;
-    if (bat_v >= 3.98) return 80;
-    if (bat_v >= 3.92) return 70;
-    if (bat_v >= 3.87) return 60;
-    if (bat_v >= 3.82) return 50;
-    if (bat_v >= 3.79) return 40;
-    if (bat_v >= 3.77) return 30;
-    if (bat_v >= 3.74) return 20;
-    if (bat_v >= 3.68) return 10;
-    if (bat_v >= 3.45) return 5;
-    if (bat_v >= 3.00) return 0;
+    if (bat_v >= 4.178) return 100;
+    if (bat_v >= 4.066) return 90;
+    if (bat_v >= 3.955) return 80;
+    if (bat_v >= 3.853) return 70;
+    if (bat_v >= 3.767) return 60;
+    if (bat_v >= 3.701) return 50;
+    if (bat_v >= 3.653) return 40;
+    if (bat_v >= 3.618) return 30;
+    if (bat_v >= 3.586) return 20;
+    if (bat_v >= 3.541) return 10;
+    if (bat_v >= 3.509) return 5;
+    if (bat_v >= 3.466) return 0;
     
-    return 0;  // 电压低于3.00V时，返回0%
+    return 0;  // 电压低于3.466V时，返回0%
 }
 
 uint8_t bat_value = 0;

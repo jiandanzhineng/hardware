@@ -1,6 +1,6 @@
 #include "Battery.h"
 
-const static int Battery_Level_Percent_Table[11] = {3000, 3650, 3700, 3740, 3760, 3795, 3840, 3910, 3980, 4070, 4200};
+const static int Battery_Level_Percent_Table[11] = {3466, 3541, 3586, 3618, 3653, 3701, 3767, 3853, 3955, 4066, 4178};
 
 static int adc_raw;
 static int voltage;
@@ -172,28 +172,16 @@ static int toPercentage(int voltage)
     return 100;
 }
 
-/*
-100%—-4.20V
-
-90%—–4.06V
-
-80%—–3.98V
-
-70%—–3.92V
-
-60%—3.87V
-
-50%—3.82V
-
-40%—–3.79V
-
-30%—3.77V
-
-20%–3.74V
-
-10%—–3.68V
-
-5%——3.45V
-
-0%—3.00V
-*/
+// 电量 (SOC)	电压 (Voltage)
+// 0%	3.466 V
+// 5%	3.509 V
+// 10%	3.541 V
+// 20%	3.586 V
+// 30%	3.618 V
+// 40%	3.653 V
+// 50%	3.701 V
+// 60%	3.767 V
+// 70%	3.853 V
+// 80%	3.955 V
+// 90%	4.066 V
+// 100%	4.178 V
