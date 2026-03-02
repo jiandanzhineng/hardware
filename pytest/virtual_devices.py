@@ -744,6 +744,85 @@ class QTZDevice(BaseVirtualDevice):
                 time.sleep(1)
 
 
+class DZC01Device(BaseVirtualDevice):
+    """DZC01电子秤设备"""
+    
+    def __init__(self, device_id: str, **kwargs):
+        super().__init__(device_id, "DZC01", **kwargs)
+        self.properties.update({
+            "weight": {"value": 0.0, "readable": True, "writeable": True},
+            "report_delay_ms": {"value": 500, "readable": True, "writeable": True},
+            "display_mode": {"value": 1, "readable": True, "writeable": True},
+            "display_on": {"value": 1, "readable": True, "writeable": True},
+            "display_contrast": {"value": 255, "readable": True, "writeable": True},
+            "line1_text": {"value": "", "readable": True, "writeable": True},
+            "line2_text": {"value": "", "readable": True, "writeable": True}
+        })
+        self.current_weight = 0.0
+        self.weight_thread = None
+        self.report_thread = None
+    
+    def _device_init(self):
+        self.weight_thread = threading.Thread(target=self._weight_simulation_task, daemon=True)
+        self.weight_thread.start()
+        self.report_thread = threading.Thread(target=self._weight_report_task, daemon=True)
+        self.report_thread.start()
+    
+    def _on_property_changed(self, property_name: str, value: Any, msg_id: int):
+        if property_name == "report_delay_ms":
+            try:
+                v = int(value)
+            except Exception:
+                v = 500
+            if v < 100:
+                v = 100
+            if v > 5000:
+                v = 5000
+            self.properties["report_delay_ms"]["value"] = v
+        elif property_name in ["display_mode", "display_contrast"]:
+            try:
+                v = int(value)
+            except Exception:
+                v = self.properties[property_name]["value"]
+            self.properties[property_name]["value"] = v
+        elif property_name in ["display_on"]:
+            self.properties[property_name]["value"] = 1 if int(value) != 0 else 0
+        elif property_name in ["line1_text", "line2_text"]:
+            self.properties[property_name]["value"] = str(value)[:32]
+    
+    def _on_action(self, data: Dict[str, Any]):
+        action = data.get("action")
+        if action == "key_clicked":
+            pass
+    
+    def _weight_simulation_task(self):
+        while self.running:
+            try:
+                base = float(self.properties["weight"]["value"])
+                drift = random.uniform(-5.0, 5.0)
+                noise = random.uniform(-1.0, 1.0)
+                w = base + drift + noise
+                if w < 0.0:
+                    w = 0.0
+                if w > 5000.0:
+                    w = 5000.0
+                self.current_weight = w
+                self.properties["weight"]["value"] = round(w, 2)
+                time.sleep(0.2)
+            except Exception as e:
+                self.logger.error(f"Error in weight simulation: {e}")
+                time.sleep(1)
+    
+    def _weight_report_task(self):
+        while self.running:
+            try:
+                self._send_property_response("weight", 0)
+                delay = int(self.properties["report_delay_ms"]["value"])
+                time.sleep(max(0.1, delay / 1000.0))
+            except Exception as e:
+                self.logger.error(f"Error in weight report: {e}")
+                time.sleep(1)
+
 if __name__ == "__main__":
     # 测试代码
     devices = []

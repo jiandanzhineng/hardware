@@ -20,7 +20,7 @@ parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
-from virtual_devices import TD01Device, DianjiDevice, ZidongsuoDevice, QTZDevice, QiyaDevice, PJ01Device, BaseVirtualDevice
+from virtual_devices import TD01Device, DianjiDevice, ZidongsuoDevice, QTZDevice, QiyaDevice, PJ01Device, DZC01Device, BaseVirtualDevice
 
 class DeviceGUIController:
     """设备GUI控制器主类"""
@@ -82,6 +82,8 @@ class DeviceGUIController:
                   command=lambda: self.create_device("QTZ")).pack(side=tk.LEFT, padx=5)
         ttk.Button(control_frame, text="创建气压传感器", 
                   command=lambda: self.create_device("QIYA")).pack(side=tk.LEFT, padx=5)
+        ttk.Button(control_frame, text="创建DZC01电子秤", 
+                  command=lambda: self.create_device("DZC01")).pack(side=tk.LEFT, padx=5)
         
         # 分隔符
         ttk.Separator(control_frame, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=10)
@@ -153,7 +155,7 @@ class DeviceGUIController:
     
     def auto_create_devices(self):
         """自动创建并启动所有设备类型"""
-        device_types = ["TD01", "PJ01", "DIANJI", "ZIDONGSUO", "QTZ", "QIYA"]
+        device_types = ["TD01", "PJ01", "DIANJI", "ZIDONGSUO", "QTZ", "QIYA", "DZC01"]
         
         for device_type in device_types:
             try:
@@ -193,6 +195,8 @@ class DeviceGUIController:
                 device = QTZDevice(device_id)
             elif device_type == "QIYA":
                 device = QiyaDevice(device_id)
+            elif device_type == "DZC01":
+                device = DZC01Device(device_id)
             else:
                 messagebox.showerror("错误", f"未知设备类型: {device_type}")
                 return
@@ -276,7 +280,7 @@ class DeviceGUIController:
                 
                 # 如果属性可写，添加控制组件
                 if prop_info["writeable"]:
-                    if prop_name in ["power", "voltage", "delay", "low_band", "high_band", "report_delay_ms", "sleep_time", "report_interval", "pressure","distance"]:
+                    if prop_name in ["power", "voltage", "delay", "low_band", "high_band", "report_delay_ms", "sleep_time", "report_interval", "pressure","distance","display_mode","display_contrast"]:
                         # 数值输入
                         entry = ttk.Entry(props_frame, width=8)
                         entry.grid(row=row, column=2, padx=3, pady=1)
@@ -285,11 +289,17 @@ class DeviceGUIController:
                                            command=lambda p=prop_name, e=entry: self.set_property(device_id, p, e.get()))
                         set_btn.grid(row=row, column=3, padx=3, pady=1)
                         
-                    elif prop_name in ["shock", "open"]:
+                    elif prop_name in ["shock", "open", "display_on"]:
                         # 开关按钮
                         toggle_btn = ttk.Button(props_frame, text="切换", 
                                               command=lambda p=prop_name: self.toggle_property(device_id, p))
                         toggle_btn.grid(row=row, column=2, padx=3, pady=1)
+                    else:
+                        entry = ttk.Entry(props_frame, width=16)
+                        entry.grid(row=row, column=2, padx=3, pady=1)
+                        set_btn = ttk.Button(props_frame, text="设置", 
+                                           command=lambda p=prop_name, e=entry: self.set_property(device_id, p, e.get()))
+                        set_btn.grid(row=row, column=3, padx=3, pady=1)
                 
                 row += 1
         
@@ -319,6 +329,10 @@ class DeviceGUIController:
             distance_entry.pack(side=tk.LEFT, padx=1)
             ttk.Button(distance_frame, text="设置", 
                       command=lambda: self.set_distance(device_id, distance_entry.get())).pack(side=tk.LEFT, padx=1)
+        
+        elif device.device_type == "DZC01":
+            ttk.Button(actions_frame, text="模拟按键点击", 
+                      command=lambda: self.send_action(device_id, "key_clicked")).pack(side=tk.LEFT, padx=3)
 
     
     def start_device(self, device_id: str):
@@ -422,7 +436,7 @@ class DeviceGUIController:
         if device_id in self.devices:
             try:
                 # 类型转换
-                if prop_name in ["power", "voltage", "delay", "low_band", "high_band", "report_delay_ms", "sleep_time"]:
+                if prop_name in ["power", "voltage", "delay", "low_band", "high_band", "report_delay_ms", "sleep_time", "display_mode", "display_contrast"]:
                     value = int(float(value))
                 elif prop_name in ["pressure"]:
                     value = float(value)

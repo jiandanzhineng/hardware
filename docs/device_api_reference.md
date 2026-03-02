@@ -11,6 +11,7 @@
 - [QTZ 激光测距传感器](#qtz-激光测距传感器)
 - [PJ01 PWM电机控制器](#pj01-pwm电机控制器)
 - [QIYA 气压检测设备](#qiya-气压检测设备)
+- [DZC01 电子秤](#dzc01-电子秤)
 - [MQTT通信协议](#mqtt通信协议)
 - [错误代码](#错误代码)
 
@@ -364,7 +365,7 @@ controller.getDeviceProperty('pj01001aabbcc', 'power');
 ### 注意事项
 
 1. **电机保护**: 建议在长时间高速运行后适当降低速度，避免电机过热
-3. **无电池监控**: PJ01设备不包含电池属性，无需关注电池电量
+2. **无电池监控**: PJ01设备不包含电池属性，无需关注电池电量
 
 ---
 
@@ -380,6 +381,71 @@ controller.getDeviceProperty('pj01001aabbcc', 'power');
 | `pressure`        | float | 只读     | 气压值(kPa)      | 0      | -40-40  |
 | `temperature`     | float | 只读     | 环境温度(°C)    | 25.0   | -40-85  |
 | `report_delay_ms` | int   | 读写     | 数据上报间隔(ms) | 5000   | 0-60000 |
+
+---
+
+## DZC01 电子秤
+
+**设备类型**: `DZC01`
+**描述**: 智能电子秤，支持重量采集、OLED显示及去皮/校准功能。主要通过API进行重量采集，可以调整 `report_delay_ms`调节自动上报时间
+
+### 设备属性
+
+| 属性名               | 类型   | 读写权限 | 描述                 | 默认值 | 范围     |
+| -------------------- | ------ | -------- | -------------------- | ------ | -------- |
+| `weight`           | int    | 只读     | 当前重量(g)          | 0      | 0-5000   |
+| `report_delay_ms`  | int    | 读写     | 重量上报间隔时间(ms) | 5000   | 100-5000 |
+| `display_mode`     | int    | 读写     | 显示模式             | 1      | 1-2      |
+| `display_on`       | int    | 读写     | 屏幕开关             | 1      | 0-1      |
+| `display_contrast` | int    | 读写     | 屏幕对比度           | 255    | 0-255    |
+| `line1_text`       | string | 读写     | 自定义文本行1        | ""     | -        |
+| `line2_text`       | string | 读写     | 自定义文本行2        | ""     | -        |
+| `button2`          | int    | 只读     | 按键2状态            | 0      | 0-1      |
+
+### 功能说明
+
+- **重量采集**: 使用HX711传感器采集重量，支持去皮和校准
+- **OLED显示**:
+  - 模式1: 显示当前重量和网络状态
+  - 模式2: 显示自定义文本(`line1_text`, `line2_text`)
+- **按键功能**:
+  - KEY1: 休眠/唤醒
+  - KEY2: 自定义功能(更新 `button2`属性)
+  - KEY3: 去皮(归零)
+  - KEY4: 500g校准
+- **数据存储**: 校准参数自动保存至NVS
+
+### 硬件接口
+
+- **GPIO 0**: HX711 SCK
+- **GPIO 1**: HX711 DT
+- **GPIO 6**: OLED SCL
+- **GPIO 7**: OLED SDA
+- **GPIO 5**: KEY1 (电源)
+- **GPIO 2**: KEY2 (自定义)
+- **GPIO 19**: KEY3 (去皮)
+- **GPIO 18**: KEY4 (校准)
+
+### 使用示例
+
+```json
+// 设置显示模式为自定义文本
+{
+  "method": "update",
+  "display_mode": 2,
+  "line1_text": "Hello",
+  "line2_text": "World",
+  "msg_id": 5001
+}
+
+// 关闭屏幕
+{
+  "method": "set",
+  "key": "display_on",
+  "value": 0,
+  "msg_id": 5002
+}
+```
 
 ---
 
@@ -513,14 +579,14 @@ class DeviceController:
         """设置设备属性"""
         if msg_id is None:
             msg_id = int(time.time() * 1000)
-    
+  
         command = {
             "method": "set",
             "key": key,
             "value": value,
             "msg_id": msg_id
         }
-    
+  
         topic = f"/drecv/{mac_address}"
         self.client.publish(topic, json.dumps(command), qos=1)
   
@@ -528,13 +594,13 @@ class DeviceController:
         """获取设备属性"""
         if msg_id is None:
             msg_id = int(time.time() * 1000)
-    
+  
         command = {
             "method": "get",
             "key": key,
             "msg_id": msg_id
         }
-    
+  
         topic = f"/drecv/{mac_address}"
         self.client.publish(topic, json.dumps(command), qos=1)
   
@@ -542,13 +608,13 @@ class DeviceController:
         """批量更新设备属性"""
         if msg_id is None:
             msg_id = int(time.time() * 1000)
-    
+  
         command = {
             "method": "update",
             "msg_id": msg_id
         }
         command.update(properties)
-    
+  
         topic = f"/drecv/{mac_address}"
         self.client.publish(topic, json.dumps(command), qos=1)
 
@@ -582,13 +648,13 @@ const mqtt = require('mqtt');
 class DeviceController {
     constructor(brokerUrl = 'mqtt://localhost:1883') {
         this.client = mqtt.connect(brokerUrl);
-    
+  
         this.client.on('connect', () => {
             console.log('Connected to MQTT broker');
             this.client.subscribe('/dpub/+');
             this.client.subscribe('/all');
         });
-    
+  
         this.client.on('message', (topic, message) => {
             const payload = JSON.parse(message.toString());
             console.log(`Received from ${topic}:`, payload);
@@ -597,27 +663,27 @@ class DeviceController {
   
     setDeviceProperty(macAddress, key, value, msgId = null) {
         if (!msgId) msgId = Date.now();
-    
+  
         const command = {
             method: 'set',
             key: key,
             value: value,
             msg_id: msgId
         };
-    
+  
         const topic = `/drecv/${macAddress}`;
         this.client.publish(topic, JSON.stringify(command), { qos: 1 });
     }
   
     getDeviceProperty(macAddress, key, msgId = null) {
         if (!msgId) msgId = Date.now();
-    
+  
         const command = {
             method: 'get',
             key: key,
             msg_id: msgId
         };
-    
+  
         const topic = `/drecv/${macAddress}`;
         this.client.publish(topic, JSON.stringify(command), { qos: 1 });
     }
@@ -641,6 +707,7 @@ setTimeout(() => {
 
 ## 版本历史
 
+- **v1.1.0** (2026-01-30): 新增DZC01电子秤设备
 - **v1.0.0** (2024-01-01): 初始版本，支持TD01、DIANJI、ZIDONGSUO、QTZ四种设备类型
 
 ---
