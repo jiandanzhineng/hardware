@@ -823,6 +823,73 @@ class DZC01Device(BaseVirtualDevice):
                 self.logger.error(f"Error in weight report: {e}")
                 time.sleep(1)
 
+
+class CUNZHI01Device(BaseVirtualDevice):
+    """CUNZHI01设备 (跳蛋 + 压力监测 + 电脉冲)"""
+    
+    def __init__(self, device_id: str, **kwargs):
+        super().__init__(device_id, "CUNZHI01", **kwargs)
+        
+        # CUNZHI01特有属性
+        self.properties.update({
+            "power": {"value": 0, "readable": True, "writeable": True},        # 0-255 (电机)
+            "voltage": {"value": 0, "readable": True, "writeable": True},      # 0-100 (电脉冲)
+            "pressure": {"value": 0, "readable": True, "writeable": False},    # 压力1 (欧姆)
+            "pressure1": {"value": 0, "readable": True, "writeable": False},   # 压力2 (欧姆)
+            "report_delay_ms": {"value": 1000, "readable": True, "writeable": True}
+        })
+        
+        self.pressure_thread = None
+        self.report_thread = None
+        
+    def _device_init(self):
+        """初始化"""
+        self.logger.info("CUNZHI01 device initialized")
+        self.pressure_thread = threading.Thread(target=self._pressure_simulation_task, daemon=True)
+        self.pressure_thread.start()
+        
+        self.report_thread = threading.Thread(target=self._report_task, daemon=True)
+        self.report_thread.start()
+        
+    def _on_property_changed(self, property_name: str, value: Any, msg_id: int):
+        if property_name == "power":
+            self.logger.info(f"Motor Power set to {value}")
+        elif property_name == "voltage":
+            self.logger.info(f"Pulse Voltage set to {value}")
+            
+    def _on_action(self, data: Dict[str, Any]):
+        pass
+        
+    def _pressure_simulation_task(self):
+        """模拟压力变化"""
+        while self.running:
+            try:
+                # 模拟随机压力
+                p1 = random.randint(0, 5000)
+                p2 = random.randint(0, 5000)
+                self.properties["pressure"]["value"] = p1
+                self.properties["pressure1"]["value"] = p2
+                time.sleep(0.5)
+            except Exception:
+                pass
+
+    def _report_task(self):
+        """定期上报任务"""
+        while self.running:
+            try:
+                report_data = {
+                    "method": "update",
+                    "pressure": self.properties["pressure"]["value"],
+                    "pressure1": self.properties["pressure1"]["value"],
+                    "battery": self.properties["battery"]["value"]
+                }
+                self._publish_message(report_data)
+                
+                delay = int(self.properties["report_delay_ms"]["value"])
+                time.sleep(max(0.1, delay / 1000.0))
+            except Exception:
+                time.sleep(1)
+
 if __name__ == "__main__":
     # 测试代码
     devices = []

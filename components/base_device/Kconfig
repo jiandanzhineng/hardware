@@ -45,6 +45,11 @@ menu "Device Selectionaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 			bool "DZC01"
 			help
 				Electronic scale device (HX711 + OLED)
+
+		config DEVICE_CUNZHI01
+			bool "CUNZHI01"
+			help
+				CUNZHI01 device (Motor + Pressure + Pulse)
 	endchoice
 
 endmenu

@@ -9,7 +9,7 @@ import json
 import time
 import threading
 import argparse
-from virtual_devices import TD01Device, DianjiDevice, ZidongsuoDevice, QTZDevice, PJ01Device, QiyaDevice, BaseVirtualDevice
+from virtual_devices import TD01Device, DianjiDevice, ZidongsuoDevice, QTZDevice, PJ01Device, QiyaDevice, DZC01Device, CUNZHI01Device, BaseVirtualDevice
 import logging
 
 # 配置日志
@@ -26,7 +26,9 @@ class DeviceManager:
         'zidongsuo': ZidongsuoDevice,
         'qtz': QTZDevice,
         'pj01': PJ01Device,
-        'qiya': QiyaDevice
+        'qiya': QiyaDevice,
+        'dzc01': DZC01Device,
+        'cunzhi01': CUNZHI01Device
     }
     
     def __init__(self):

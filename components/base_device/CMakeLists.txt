@@ -28,6 +28,10 @@ if(CONFIG_DEVICE_DZC01)
     list(APPEND srcs "DZC01.c")
 endif()
 
+if(CONFIG_DEVICE_CUNZHI01)
+    list(APPEND srcs "CUNZHI01.c")
+endif()
+
 
 idf_component_register(SRCS "${srcs}"
                         INCLUDE_DIRS "include"
