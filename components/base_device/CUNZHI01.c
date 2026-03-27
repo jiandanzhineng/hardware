@@ -281,48 +281,18 @@ void on_device_first_ready(void) {
 
 void on_set_property(char *property_name, cJSON *property_value, int msg_id) {
     if (strcmp(property_name, "power") == 0) {
-        power_property.value.int_value = property_value->valueint;
         motor_control(power_property.value.int_value);
     } else if (strcmp(property_name, "voltage") == 0) {
-        voltage_property.value.int_value = property_value->valueint;
         boost_control(voltage_property.value.int_value);
-    } else if (strcmp(property_name, "report_delay_ms") == 0) {
-        report_delay_ms_property.value.int_value = property_value->valueint;
     } else if (strcmp(property_name, "shock") == 0) {
-        ESP_LOGI(TAG, "Shock changed to: %d", property_value->valueint);
-        shock_property.value.int_value = property_value->valueint;
+        ESP_LOGI(TAG, "Shock changed to: %d", shock_property.value.int_value);
         if (shock_property.value.int_value == 0) {
             boost_control(0);
         } else {
             boost_control(voltage_property.value.int_value);
         }
-    } else if (strcmp(property_name, "delay") == 0) {
-        delay_property.value.int_value = property_value->valueint;
     } else if (strcmp(property_name, "safe") == 0) {
-        safe_property.value.int_value = property_value->valueint;
         nvs_cunzhi01_set();
-    } else if (strcmp(property_name, "game_mode") == 0) {
-        game_mode_property.value.int_value = property_value->valueint;
-    } else if (strcmp(property_name, "game_duration") == 0) {
-        game_duration_property.value.int_value = property_value->valueint;
-    } else if (strcmp(property_name, "game_e_vol") == 0) {
-        game_e_vol_property.value.int_value = property_value->valueint;
-    } else if (strcmp(property_name, "game_e_dur") == 0) {
-        game_e_dur_property.value.int_value = property_value->valueint;
-    } else if (strcmp(property_name, "game_p1_thresh") == 0) {
-        game_p1_thresh_property.value.float_value = property_value->valuedouble;
-    } else if (strcmp(property_name, "game_p2_thresh") == 0) {
-        game_p2_thresh_property.value.float_value = property_value->valuedouble;
-    } else if (strcmp(property_name, "game_m_dur") == 0) {
-        game_m_dur_property.value.int_value = property_value->valueint;
-    } else if (strcmp(property_name, "game_m_power") == 0) {
-        game_m_power_property.value.int_value = property_value->valueint;
-    } else if (strcmp(property_name, "game_m_step") == 0) {
-        game_m_step_property.value.int_value = property_value->valueint;
-    } else if (strcmp(property_name, "game_cooldown") == 0) {
-        game_cooldown_property.value.int_value = property_value->valueint;
-    } else if (strcmp(property_name, "game_kegel_t") == 0) {
-        game_kegel_t_property.value.int_value = property_value->valueint;
     }
 }
 
