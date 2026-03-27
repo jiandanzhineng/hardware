@@ -39,6 +39,17 @@
 | `pressure` | int | 只读 | 压力通道1数值 (欧姆) | 0 | 0-99999 |
 | `pressure1` | int | 只读 | 压力通道2数值 (欧姆) | 0 | 0-99999 |
 | `report_delay_ms` | int | 读写 | 状态上报周期 (毫秒) | 1000 | 100-10000 |
+| `game_mode` | int | 读写 | 当前玩法模式 | 0 | 0=停止, 1=寸止玩法, 2=踮脚提肛玩法 |
+| `game_duration` | int | 读写 | 玩法持续时间 | 0 | 秒 |
+| `game_e_vol` | int | 读写 | 玩法电击电压 | 0 | 0-75 |
+| `game_e_dur` | int | 读写 | 玩法电击时长 | 0 | 毫秒 |
+| `game_p1_thresh` | float | 读写 | 临界压力1(寸止阈值/括约肌阈值) | 0 | 浮点数 |
+| `game_p2_thresh` | float | 读写 | 临界压力2(脚后跟踮脚阈值) | 0 | 浮点数 |
+| `game_m_dur` | int | 读写 | 玩法电机刺激时间 | 0 | 毫秒 |
+| `game_m_power` | int | 读写 | 玩法电机刺激强度 | 0 | 0-255 |
+| `game_m_step` | int | 读写 | 寸止电机每秒提升强度 | 0 | 整数 |
+| `game_cooldown` | int | 读写 | 玩法惩罚冷静期 | 0 | 毫秒 |
+| `game_kegel_t` | int | 读写 | 连续未提肛判定时间 | 0 | 毫秒 |
 
 ## 消息与上报
 
@@ -106,3 +117,45 @@
 - 在 `components/base_device/CMakeLists.txt` 中追加 `CUNZHI01.c`。
 - 在 `components/base_device/Kconfig` 中新增 `DEVICE_CUNZHI01` 选项。
 - 在 `components/base_device/CUNZHI01.c` 中实现属性读写与硬件控制逻辑。
+
+# 设备内玩法
+
+通过设置 `game_mode` 属性启动特定玩法，玩法参数通过各类 `game_` 前缀的属性进行配置。所有玩法均由固件内部的独立任务（周期100ms）处理。玩法结束后会自动将 `game_mode` 置 0 并关闭所有输出。
+
+## 寸止玩法 (`game_mode = 1`)
+
+检测 `pressure` (压力通道1) 的压力值：
+- **高于阈值 (`game_p1_thresh`)**：触发惩罚。电机强度清零并停止，启动电刺激(`game_e_vol`)持续一段时间(`game_e_dur`)。惩罚结束后进入冷静期(`game_cooldown`)，期间电机保持停止，且不会再次触发惩罚。
+- **低于或等于阈值**：若不在冷静期/惩罚期内，电机从 0 开始，每秒按 `game_m_step` 逐步提升强度，最高不超过 255。
+
+**相关参数 (对应 Property)**
+- `game_duration`: 玩法持续时间 (秒)
+- `game_p1_thresh`: 临界压力
+- `game_e_vol`: 惩罚电击电压
+- `game_e_dur`: 惩罚电击时长 (毫秒)
+- `game_m_step`: 电机每秒提升强度
+- `game_cooldown`: 惩罚冷静期 (毫秒)
+
+## 踮脚提肛玩法 (`game_mode = 2`)
+
+通过 `pressure` 检测括约肌压力，通过 `pressure1` 检测脚后跟压强。
+
+**惩罚触发条件**（两者满足其一即触发电击）：
+1. **未踮脚**：`pressure1` 大于脚后跟临界压力 (`game_p2_thresh`)。
+2. **未提肛**：`pressure` 连续 `game_kegel_t` 毫秒内均小于括约肌临界压力 (`game_p1_thresh`)。
+
+**惩罚执行逻辑**：
+- 如果满足 **未踮脚** 或 **未提肛** 条件：启动电脉冲刺激(`game_e_vol`)，持续 `game_e_dur` 毫秒。
+- 如果满足 **未提肛** 条件：同时启动电机进行刺激(`game_m_power`)，持续 `game_m_dur` 毫秒。
+- 惩罚结束后，进入 `game_cooldown` 毫秒的冷静期。冷静期内不会再次触发惩罚，也不累加未提肛时间。
+
+**相关参数 (对应 Property)**
+- `game_duration`: 玩法持续时间 (秒)
+- `game_p1_thresh`: 括约肌临界压力
+- `game_p2_thresh`: 脚后跟部临界压力
+- `game_kegel_t`: 连续未提肛判定时间 (毫秒)
+- `game_e_vol`: 惩罚电击电压
+- `game_e_dur`: 惩罚电击时长 (毫秒)
+- `game_m_power`: 惩罚电机刺激强度
+- `game_m_dur`: 惩罚电机刺激时间 (毫秒)
+- `game_cooldown`: 惩罚冷静期 (毫秒)
