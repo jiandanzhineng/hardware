@@ -35,6 +35,7 @@ APP 通过 BLE 连接 `CUNZHI01` 设备，完成以下能力：
 | `report_delay_ms` | int | 上报周期 |
 | `game_mode` | int | 玩法开关，`0`停止，`1`寸止，`2`踮脚提肛 |
 | `game_duration` | int | 玩法时长，单位秒，`0`表示不自动结束 |
+| `game_fly_dur` | int | 寸止玩法起飞期时长，单位秒 |
 | `game_e_vol` | int | 惩罚电脉冲强度 |
 | `game_e_dur` | int | 惩罚电脉冲时长，毫秒 |
 | `game_p1_thresh` | float | 压力阈值1 |
@@ -80,6 +81,7 @@ APP 通过 BLE 连接 `CUNZHI01` 设备，完成以下能力：
 配置项：
 
 - 玩法时长：`game_duration`
+- 起飞期时长：`game_fly_dur`
 - 寸止阈值：`game_p1_thresh`
 - 惩罚电脉冲强度：`game_e_vol`
 - 惩罚电脉冲时长：`game_e_dur`
@@ -125,10 +127,11 @@ APP 通过 BLE 连接 `CUNZHI01` 设备，完成以下能力：
 
 玩法规则(这些规则在设备中实现 此处仅展示)：
 
-- 当 `pressure > game_p1_thresh` 时，触发惩罚
+- 当不在起飞期且 `pressure > game_p1_thresh` 时，触发惩罚
 - 惩罚时电机立即归零，并触发电脉冲 `game_e_vol`，持续 `game_e_dur`
 - 惩罚结束后进入 `game_cooldown`
 - 不在惩罚/冷静期时，电机从 0 开始按 `game_m_step` 每秒递增，最大 255
+- 进入最后 `game_fly_dur` 秒后即进入**起飞期**，此期间不再因压力过大触发新的惩罚，允许电机强度持续提升
 - 到达 `game_duration` 后，设备自动停止并把 `game_mode` 置为 0
 
 APP 侧重点：

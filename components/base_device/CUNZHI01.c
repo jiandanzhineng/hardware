@@ -55,6 +55,7 @@ device_property_t safe_property;
 // Game properties
 device_property_t game_mode_property;
 device_property_t game_duration_property;
+device_property_t game_fly_dur_property;
 device_property_t game_e_vol_property;
 device_property_t game_e_dur_property;
 device_property_t game_p1_thresh_property;
@@ -83,6 +84,7 @@ device_property_t *device_properties[] = {
     &report_delay_ms_property,
     &game_mode_property,
     &game_duration_property,
+    &game_fly_dur_property,
     &game_e_vol_property,
     &game_e_dur_property,
     &game_p1_thresh_property,
@@ -202,6 +204,12 @@ void init_properties(void) {
     strcpy(game_duration_property.name, "game_duration");
     game_duration_property.value_type = PROPERTY_TYPE_INT;
     game_duration_property.value.int_value = 0;
+
+    game_fly_dur_property.readable = true;
+    game_fly_dur_property.writeable = true;
+    strcpy(game_fly_dur_property.name, "game_fly_dur");
+    game_fly_dur_property.value_type = PROPERTY_TYPE_INT;
+    game_fly_dur_property.value.int_value = 60;
 
     game_e_vol_property.readable = true;
     game_e_vol_property.writeable = true;
@@ -669,6 +677,16 @@ static void gameplay_task(void *arg) {
             int e_vol = game_e_vol_property.value.int_value;
             int m_step = game_m_step_property.value.int_value;
             int cooldown = game_cooldown_property.value.int_value;
+            int fly_dur_s = game_fly_dur_property.value.int_value;
+
+            bool is_flying = false;
+            if (duration_s > 0 && fly_dur_s > 0) {
+                int64_t time_elapsed = current_time - game_start_time;
+                int64_t time_remaining = ((int64_t)duration_s * 1000000) - time_elapsed;
+                if (time_remaining <= (int64_t)fly_dur_s * 1000000 && time_remaining > 0) {
+                    is_flying = true;
+                }
+            }
 
             if (current_time < cooldown_end_time) {
                 // In punishment or cooldown
@@ -680,7 +698,7 @@ static void gameplay_task(void *arg) {
                 current_motor_power = 0;
                 motor_control(0);
             } else {
-                if (p1 > p1_thresh) {
+                if (p1 > p1_thresh && !is_flying) {
                     // Trigger punishment
                     current_motor_power = 0;
                     motor_control(0);
