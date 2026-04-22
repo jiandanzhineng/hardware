@@ -216,7 +216,7 @@ static void build_gatt_table(void) {
 }
 
 static void gatts_profile_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t *param) {
-    ESP_LOGI(TAG, "gatts_profile_event_handler, event = %d", event);
+    // ESP_LOGI(TAG, "gatts_profile_event_handler, event = %d", event);
     switch (event) {
         case ESP_GATTS_REG_EVT:
             ESP_LOGI(TAG, "ESP_GATTS_REG_EVT, app_id = %d", param->reg.app_id);
@@ -329,7 +329,7 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_
             update_last_msg_time();
             break;
         default:
-            ESP_LOGI(TAG, "default, event = %d", event);
+            // ESP_LOGI(TAG, "default, event = %d", event);
             break;
     }
 }
