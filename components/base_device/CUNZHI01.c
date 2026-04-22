@@ -578,6 +578,27 @@ static void pressure_task(void *arg) {
     }
 }
 
+static const int Battery_Level_Percent_Table[11] = {3466, 3541, 3586, 3618, 3653, 3701, 3767, 3853, 3955, 4066, 4178};
+
+static int toPercentage(int voltage)
+{
+    int i = 0;
+    if (voltage < Battery_Level_Percent_Table[0])
+    {
+        return 0;
+    }
+
+    for (i = 0; i < (sizeof(Battery_Level_Percent_Table) / sizeof(Battery_Level_Percent_Table[0])); i++)
+    {
+        if (voltage < Battery_Level_Percent_Table[i])
+        {
+            return i * 10 - (10UL * (int)(Battery_Level_Percent_Table[i] - voltage)) / (int)(Battery_Level_Percent_Table[i] - Battery_Level_Percent_Table[i - 1]);
+        }
+    }
+
+    return 100;
+}
+
 static void battery_task(void *arg) {
     while (1) {
         gpio_set_level(GPIO_BAT_EN, 1);
@@ -585,16 +606,11 @@ static void battery_task(void *arg) {
         int raw = adc1_get_raw(ADC1_CHANNEL_0);
         gpio_set_level(GPIO_BAT_EN, 0);
 
-        // Map ADC to Percentage.
-        // Reference TD01/dianji. 
-        // float bat_v = raw / BAT_ADC_K;
-        // Let's use simple mapping for now.
-        // 4.2V = 100%, 3.4V = 0%.
-        // Assuming default attenuation, 4095 ~= 2.6V? No, DB_11 is up to 2.6V or 3.3V?
-        // ESP32C3 DB_11 is up to ~2500mV. Divider is needed.
-        // Assuming hardware is correct, just map raw.
-        // Placeholder mapping:
-        int pct = raw * 100 / 4095; 
+        // 参考 TD01/dianji，使用其 BAT_ADC_K 比例换算为实际电压，再转百分比
+        float bat_v = raw / 363.2f;
+        int voltage_mv = (int)(bat_v * 1000);
+        int pct = toPercentage(voltage_mv);
+        
         device_update_property_int("battery", pct);
 
         vTaskDelay(pdMS_TO_TICKS(30000));
