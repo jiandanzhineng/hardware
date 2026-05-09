@@ -114,3 +114,123 @@ jobs:
         done
         
         cat firmware_summary.md
+
+    - name: Generate OSS version manifest
+      continue-on-error: true
+      env:
+        OSS_PREFIX: ${{ secrets.OSS_PREFIX }}
+        RELEASE_VERSION: ${{ github.ref_name }}
+        RELEASE_COMMIT: ${{ github.sha }}
+      run: |
+        python3 <<'PY'
+        import datetime
+        import hashlib
+        import json
+        import os
+        from pathlib import Path
+
+        firmware_root = Path("firmware-files")
+        upload_root = Path("oss-upload")
+        upload_root.mkdir(exist_ok=True)
+
+        version = os.environ["RELEASE_VERSION"]
+        commit = os.environ["RELEASE_COMMIT"]
+        prefix = os.environ.get("OSS_PREFIX", "").strip("/")
+        latest_prefix = f"{prefix}/latest" if prefix else "latest"
+
+        firmwares = []
+        for path in sorted(firmware_root.glob("firmware-*/under_silicon_*.bin")):
+            device = path.parent.name.removeprefix("firmware-")
+            filename = path.name
+            sha256 = hashlib.sha256()
+            with path.open("rb") as firmware_file:
+                for chunk in iter(lambda: firmware_file.read(1024 * 1024), b""):
+                    sha256.update(chunk)
+
+            firmwares.append({
+                "device": device,
+                "kind": "merged" if filename.endswith("_merged.bin") else "app",
+                "filename": filename,
+                "object_key": f"{latest_prefix}/{filename}",
+                "size_bytes": path.stat().st_size,
+                "sha256": sha256.hexdigest(),
+            })
+
+        if not firmwares:
+            raise SystemExit("No firmware files found for OSS manifest")
+
+        manifest = {
+            "latest_version": version,
+            "generated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "commit": commit,
+            "firmwares": firmwares,
+        }
+
+        (upload_root / "version.json").write_text(
+            json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        print(json.dumps(manifest, ensure_ascii=False, indent=2))
+        PY
+
+    - name: Upload firmware and manifest to Aliyun OSS
+      continue-on-error: true
+      env:
+        OSS_ENDPOINT: ${{ secrets.OSS_ENDPOINT }}
+        OSS_BUCKET: ${{ secrets.OSS_BUCKET }}
+        OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
+        OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
+        OSS_PREFIX: ${{ secrets.OSS_PREFIX }}
+        RELEASE_VERSION: ${{ github.ref_name }}
+      run: |
+        set -Eeuo pipefail
+
+        missing=0
+        for name in OSS_ENDPOINT OSS_BUCKET OSS_ACCESS_KEY_ID OSS_ACCESS_KEY_SECRET OSS_PREFIX; do
+          if [ -z "${!name:-}" ]; then
+            echo "::warning::${name} is not configured; skipping Aliyun OSS upload"
+            missing=1
+          fi
+        done
+
+        if [ "$missing" -ne 0 ]; then
+          exit 0
+        fi
+
+        if [ ! -f oss-upload/version.json ]; then
+          echo "::warning::oss-upload/version.json was not generated; skipping Aliyun OSS upload"
+          exit 0
+        fi
+
+        sudo -v
+        curl -fsSL https://gosspublic.alicdn.com/ossutil/install.sh | sudo bash
+
+        ossutil_config="${RUNNER_TEMP}/ossutilconfig"
+        cat > "$ossutil_config" <<EOF
+        [Credentials]
+        language = EN
+        endpoint = ${OSS_ENDPOINT}
+        accessKeyID = ${OSS_ACCESS_KEY_ID}
+        accessKeySecret = ${OSS_ACCESS_KEY_SECRET}
+        EOF
+        chmod 600 "$ossutil_config"
+
+        oss_prefix="${OSS_PREFIX#/}"
+        oss_prefix="${oss_prefix%/}"
+        if [ -n "$oss_prefix" ]; then
+          oss_base="oss://${OSS_BUCKET}/${oss_prefix}/latest"
+        else
+          oss_base="oss://${OSS_BUCKET}/latest"
+        fi
+
+        find firmware-files -path "*/under_silicon_*.bin" -type f | sort | while read -r file; do
+          filename="$(basename "$file")"
+          ossutil cp "$file" "${oss_base}/${filename}" -f -c "$ossutil_config"
+        done
+
+        ossutil cp oss-upload/version.json "${oss_base}/version.json" -f -c "$ossutil_config"
+
+        ossutil rm "${oss_base}/" -r -f \
+          --include "under_silicon_*.bin" \
+          --exclude "*_${RELEASE_VERSION}*.bin" \
+          -c "$ossutil_config" || echo "::warning::Failed to clean old firmware files from Aliyun OSS latest directory"
