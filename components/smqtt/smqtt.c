@@ -1,6 +1,5 @@
 #include "smqtt.h"
 #include "esp_system.h"
-#include "esp_bt.h"
 
 static const char *TAG = "SMQTT";
 esp_mqtt_client_handle_t smqtt_client;
@@ -26,6 +25,11 @@ static volatile bool smqtt_connected = false;
 
 // Forward declaration for periodic task
 static void smqtt_start_client_on_current_broker_task(void *arg);
+
+__attribute__((weak)) void app_release_ble_resources(const char *reason)
+{
+    (void)reason;
+}
 
 static void ip_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
 {
@@ -89,9 +93,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         msg_id = esp_mqtt_client_subscribe(client, recv_topic, 0);
         ESP_LOGI(TAG, "sent subscribe successful, topic is %s, msg_id=%d", recv_topic, msg_id);
         device_first_ready();
-        if (esp_bt_controller_get_status() == ESP_BT_CONTROLLER_STATUS_ENABLED) {
-            esp_bt_controller_disable();
-        }
+        app_release_ble_resources("mqtt connected");
         break;
     case MQTT_EVENT_DISCONNECTED:
         ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");

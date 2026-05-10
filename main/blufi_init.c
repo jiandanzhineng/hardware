@@ -51,27 +51,41 @@ esp_err_t esp_blufi_host_deinit(void)
 {
     int ret;
     ret = esp_blufi_profile_deinit();
-    if(ret != ESP_OK) {
+    if(ret != ESP_OK && ret != ESP_ERR_INVALID_STATE) {
         return ret;
     }
 
-    ret = esp_bluedroid_disable();
-    if (ret) {
-        BLUFI_ERROR("%s deinit bluedroid failed: %s\n", __func__, esp_err_to_name(ret));
-        return ESP_FAIL;
+    if (esp_bluedroid_get_status() == ESP_BLUEDROID_STATUS_ENABLED) {
+        ret = esp_bluedroid_disable();
+        if (ret) {
+            BLUFI_ERROR("%s disable bluedroid failed: %s\n", __func__, esp_err_to_name(ret));
+            return ESP_FAIL;
+        }
     }
 
-    ret = esp_bluedroid_deinit();
-    if (ret) {
-        BLUFI_ERROR("%s deinit bluedroid failed: %s\n", __func__, esp_err_to_name(ret));
-        return ESP_FAIL;
+    if (esp_bluedroid_get_status() == ESP_BLUEDROID_STATUS_INITIALIZED) {
+        ret = esp_bluedroid_deinit();
+        if (ret) {
+            BLUFI_ERROR("%s deinit bluedroid failed: %s\n", __func__, esp_err_to_name(ret));
+            return ESP_FAIL;
+        }
     }
 
-    ESP_ERROR_CHECK(esp_bt_controller_disable());
-    ret = esp_bt_controller_deinit();
-    if (ret) {
-        BLUFI_ERROR("%s deinit bluedroid failed: %s\n", __func__, esp_err_to_name(ret));
-        return ESP_FAIL;
+    esp_bt_controller_status_t bt_status = esp_bt_controller_get_status();
+    if (bt_status == ESP_BT_CONTROLLER_STATUS_ENABLED) {
+        ret = esp_bt_controller_disable();
+        if (ret) {
+            BLUFI_ERROR("%s disable bt controller failed: %s\n", __func__, esp_err_to_name(ret));
+            return ESP_FAIL;
+        }
+        bt_status = esp_bt_controller_get_status();
+    }
+    if (bt_status == ESP_BT_CONTROLLER_STATUS_INITED) {
+        ret = esp_bt_controller_deinit();
+        if (ret) {
+            BLUFI_ERROR("%s deinit bt controller failed: %s\n", __func__, esp_err_to_name(ret));
+            return ESP_FAIL;
+        }
     }
 
     return ESP_OK;

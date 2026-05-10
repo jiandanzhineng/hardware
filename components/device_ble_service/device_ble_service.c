@@ -35,6 +35,7 @@ static uint8_t **prop_cccd_buf = NULL;
 static uint8_t *prop_notify_enabled = NULL;
 static uint16_t *prop_uuid16_arr = NULL;
 static uint8_t *prop_char_props_arr = NULL;
+static bool s_ble_service_started = false;
 
 static const uint16_t primary_service_uuid = ESP_GATT_UUID_PRI_SERVICE;
 static const uint16_t character_declaration_uuid = ESP_GATT_UUID_CHAR_DECLARE;
@@ -335,11 +336,52 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_
 }
 
 void device_ble_service_init(void) {
+    s_ble_service_started = true;
     ESP_ERROR_CHECK(esp_ble_gatts_register_callback(gatts_profile_event_handler));
     ESP_ERROR_CHECK(esp_ble_gatts_app_register(APP_ID));
 }
 
+void device_ble_service_deinit(void) {
+    if (!s_ble_service_started) {
+        return;
+    }
+
+    for (int i = 0; i < device_properties_num; i++) {
+        free(prop_value_buf ? prop_value_buf[i] : NULL);
+        free(prop_cccd_buf ? prop_cccd_buf[i] : NULL);
+    }
+
+    free(gatt_db);
+    free(handle_table);
+    free(prop_value_index);
+    free(prop_cccd_index);
+    free(prop_value_buf);
+    free(prop_cccd_buf);
+    free(prop_value_len);
+    free(prop_value_maxlen);
+    free(prop_notify_enabled);
+    free(prop_uuid16_arr);
+    free(prop_char_props_arr);
+
+    s_gatts_if = 0;
+    conn_id_last = -1;
+    gatt_db = NULL;
+    handle_table = NULL;
+    prop_value_index = NULL;
+    prop_cccd_index = NULL;
+    prop_value_buf = NULL;
+    prop_cccd_buf = NULL;
+    prop_value_len = NULL;
+    prop_value_maxlen = NULL;
+    prop_notify_enabled = NULL;
+    prop_uuid16_arr = NULL;
+    prop_char_props_arr = NULL;
+    total_attr_count = 0;
+    s_ble_service_started = false;
+}
+
 void device_ble_update_property(int i){
+    if (!s_ble_service_started || !handle_table || !prop_value_buf || !prop_value_index) return;
     if (i < 0 || i >= device_properties_num) return;
     device_property_t *p = device_properties[i];
     if (p->value_type == PROPERTY_TYPE_INT){

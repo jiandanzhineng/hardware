@@ -22,8 +22,10 @@
 #include "esp_wifi.h"
 #include "esp_event.h"
 #include "esp_log.h"
+#include "esp_heap_caps.h"
 #include "nvs_flash.h"
 #include "esp_bt.h"
+#include "esp_bt_main.h"
 
 #include "esp_blufi_api.h"
 #include "blufi_example.h"
@@ -43,6 +45,73 @@
 
 #define EXAMPLE_WIFI_CONNECTION_MAXIMUM_RETRY CONFIG_EXAMPLE_WIFI_CONNECTION_MAXIMUM_RETRY
 #define EXAMPLE_INVALID_REASON 255
+
+static const char *BLE_RELEASE_TAG = "BLE_RELEASE";
+static bool s_ble_resources_released = false;
+static bool s_ble_runtime_ready = false;
+static bool s_ble_release_pending = false;
+
+static void log_ble_release_heap(const char *stage)
+{
+    ESP_LOGI(BLE_RELEASE_TAG, "BLE release heap [%s]: free=%u, largest=%u, min_free=%u",
+             stage,
+             (unsigned)heap_caps_get_free_size(MALLOC_CAP_8BIT),
+             (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT),
+             (unsigned)heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT));
+}
+
+void app_release_ble_resources(const char *reason)
+{
+    if (s_ble_resources_released) {
+        ESP_LOGI(BLE_RELEASE_TAG, "BLE resources already released");
+        return;
+    }
+
+    if (!s_ble_runtime_ready) {
+        ESP_LOGI(BLE_RELEASE_TAG, "BLE runtime is not ready, defer release: %s", reason ? reason : "no reason");
+        s_ble_release_pending = true;
+        return;
+    }
+
+    ESP_LOGI(BLE_RELEASE_TAG, "release BLE resources: %s", reason ? reason : "no reason");
+    log_ble_release_heap("before release");
+
+    esp_err_t ret = esp_blufi_host_deinit();
+    if (ret != ESP_OK && ret != ESP_ERR_INVALID_STATE) {
+        ESP_LOGW(BLE_RELEASE_TAG, "esp_blufi_host_deinit failed: %s", esp_err_to_name(ret));
+    }
+
+    ESP_LOGI(BLE_RELEASE_TAG, "release local BLE buffers");
+    device_ble_service_deinit();
+
+    esp_bt_controller_status_t bt_status = esp_bt_controller_get_status();
+    if (bt_status == ESP_BT_CONTROLLER_STATUS_ENABLED) {
+        ESP_LOGI(BLE_RELEASE_TAG, "disable BT controller");
+        ret = esp_bt_controller_disable();
+        if (ret != ESP_OK) {
+            ESP_LOGW(BLE_RELEASE_TAG, "esp_bt_controller_disable failed: %s", esp_err_to_name(ret));
+        }
+        bt_status = esp_bt_controller_get_status();
+    }
+    if (bt_status == ESP_BT_CONTROLLER_STATUS_INITED) {
+        ESP_LOGI(BLE_RELEASE_TAG, "deinit BT controller");
+        ret = esp_bt_controller_deinit();
+        if (ret != ESP_OK) {
+            ESP_LOGW(BLE_RELEASE_TAG, "esp_bt_controller_deinit failed: %s", esp_err_to_name(ret));
+        }
+    }
+
+    ESP_LOGI(BLE_RELEASE_TAG, "release BLE controller memory");
+    ret = esp_bt_controller_mem_release(ESP_BT_MODE_BLE);
+    if (ret != ESP_OK && ret != ESP_ERR_INVALID_STATE) {
+        ESP_LOGW(BLE_RELEASE_TAG, "esp_bt_controller_mem_release(BLE) failed: %s", esp_err_to_name(ret));
+    }
+
+    s_ble_resources_released = true;
+    s_ble_runtime_ready = false;
+    s_ble_release_pending = false;
+    log_ble_release_heap("after release");
+}
 #define EXAMPLE_INVALID_RSSI -128
 
 static void example_event_callback(esp_blufi_cb_event_t event, esp_blufi_cb_param_t *param);
@@ -650,6 +719,10 @@ void app_main(void)
     device_init();
 
     device_ble_service_init();
+    s_ble_runtime_ready = true;
+    if (s_ble_release_pending) {
+        app_release_ble_resources("deferred mqtt connected");
+    }
 
     while (1)
     {

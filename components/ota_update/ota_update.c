@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include <string.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -82,7 +83,7 @@ static void ota_task_entry(void *pvParameter) {
         .event_handler = _http_event_handler,
         .keep_alive_enable = true,
         .timeout_ms = 30000,
-        .buffer_size = 8192,
+        .buffer_size = 4096,
         .buffer_size_tx = 1024,
         .skip_cert_common_name_check = false,
     };
@@ -94,8 +95,10 @@ static void ota_task_entry(void *pvParameter) {
     esp_https_ota_handle_t https_ota_handle = NULL;
     esp_err_t err = esp_https_ota_begin(&ota_config, &https_ota_handle);
     if (err != ESP_OK) {
+        char msg[64];
+        snprintf(msg, sizeof(msg), "OTA begin failed: %s", esp_err_to_name(err));
         ESP_LOGE(TAG, "ESP HTTPS OTA Begin failed: %s (0x%x)", esp_err_to_name(err), err);
-        report_ota_status("failed", 0, "OTA Begin failed");
+        report_ota_status("failed", 0, msg);
         free(url);
         vTaskDelete(NULL);
         return;
@@ -104,9 +107,11 @@ static void ota_task_entry(void *pvParameter) {
     esp_app_desc_t app_desc;
     err = esp_https_ota_get_img_desc(https_ota_handle, &app_desc);
     if (err != ESP_OK) {
+        char msg[64];
+        snprintf(msg, sizeof(msg), "Get image desc failed: %s", esp_err_to_name(err));
         ESP_LOGE(TAG, "esp_https_ota_get_img_desc failed: %s", esp_err_to_name(err));
-        esp_https_ota_finish(https_ota_handle);
-        report_ota_status("failed", 0, "Get image desc failed");
+        esp_https_ota_abort(https_ota_handle);
+        report_ota_status("failed", 0, msg);
         free(url);
         vTaskDelete(NULL);
         return;
@@ -114,6 +119,7 @@ static void ota_task_entry(void *pvParameter) {
     ESP_LOGI(TAG, "New firmware version: %s", app_desc.version);
 
     int last_progress = -1;
+    int last_progress_value = 0;
     while (1) {
         err = esp_https_ota_perform(https_ota_handle);
         if (err != ESP_ERR_HTTPS_OTA_IN_PROGRESS) {
@@ -122,6 +128,7 @@ static void ota_task_entry(void *pvParameter) {
         int read_len = esp_https_ota_get_image_len_read(https_ota_handle);
         int total_len = esp_https_ota_get_image_size(https_ota_handle);
         int progress = (total_len > 0) ? (read_len * 100 / total_len) : 0;
+        last_progress_value = progress;
         
         if (progress != last_progress && progress % 10 == 0) {
             ESP_LOGI(TAG, "OTA Progress: %d%%", progress);
@@ -130,14 +137,36 @@ static void ota_task_entry(void *pvParameter) {
         }
     }
 
-    if (esp_https_ota_finish(https_ota_handle) == ESP_OK) {
+    int read_len = esp_https_ota_get_image_len_read(https_ota_handle);
+    int total_len = esp_https_ota_get_image_size(https_ota_handle);
+    if (total_len > 0) {
+        last_progress_value = read_len * 100 / total_len;
+    }
+
+    if (err != ESP_OK) {
+        char msg[80];
+        snprintf(msg, sizeof(msg), "OTA perform failed: %s", esp_err_to_name(err));
+        ESP_LOGE(TAG, "OTA perform failed: %s (0x%x), read=%d/%d, progress=%d%%",
+                 esp_err_to_name(err), err, read_len, total_len, last_progress_value);
+        esp_https_ota_abort(https_ota_handle);
+        report_ota_status("failed", last_progress_value, msg);
+        free(url);
+        vTaskDelete(NULL);
+        return;
+    }
+
+    esp_err_t finish_err = esp_https_ota_finish(https_ota_handle);
+    if (finish_err == ESP_OK) {
         ESP_LOGI(TAG, "OTA upgrade successful. Rebooting...");
         report_ota_status("success", 100, "Rebooting");
         vTaskDelay(1000 / portTICK_PERIOD_MS);
         esp_restart();
     } else {
-        ESP_LOGE(TAG, "OTA upgrade failed");
-        report_ota_status("failed", 0, "OTA finish failed");
+        char msg[80];
+        snprintf(msg, sizeof(msg), "OTA finish failed: %s", esp_err_to_name(finish_err));
+        ESP_LOGE(TAG, "OTA finish failed: %s (0x%x), read=%d/%d, progress=%d%%",
+                 esp_err_to_name(finish_err), finish_err, read_len, total_len, last_progress_value);
+        report_ota_status("failed", last_progress_value, msg);
     }
     
     free(url);
