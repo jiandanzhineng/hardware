@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <string.h>
+#include <stdbool.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/event_groups.h"
@@ -19,6 +20,49 @@ extern esp_mqtt_client_handle_t smqtt_client;
 extern char publish_topic[32];
 
 static const char *TAG = "OTA_UPDATE";
+static portMUX_TYPE s_ota_state_mux = portMUX_INITIALIZER_UNLOCKED;
+static bool s_ota_in_progress = false;
+static int s_ota_progress = 0;
+
+static bool ota_try_begin(void) {
+    bool can_begin = false;
+
+    portENTER_CRITICAL(&s_ota_state_mux);
+    if (!s_ota_in_progress) {
+        s_ota_in_progress = true;
+        s_ota_progress = 0;
+        can_begin = true;
+    }
+    portEXIT_CRITICAL(&s_ota_state_mux);
+
+    return can_begin;
+}
+
+static void ota_set_progress(int progress) {
+    if (progress < 0) progress = 0;
+    if (progress > 100) progress = 100;
+
+    portENTER_CRITICAL(&s_ota_state_mux);
+    s_ota_progress = progress;
+    portEXIT_CRITICAL(&s_ota_state_mux);
+}
+
+static int ota_get_progress(void) {
+    int progress = 0;
+
+    portENTER_CRITICAL(&s_ota_state_mux);
+    progress = s_ota_progress;
+    portEXIT_CRITICAL(&s_ota_state_mux);
+
+    return progress;
+}
+
+static void ota_end(void) {
+    portENTER_CRITICAL(&s_ota_state_mux);
+    s_ota_in_progress = false;
+    s_ota_progress = 0;
+    portEXIT_CRITICAL(&s_ota_state_mux);
+}
 
 // Helper to report status via MQTT
 static void report_ota_status(const char *status, int progress, const char *msg) {
@@ -74,6 +118,7 @@ static esp_err_t _http_event_handler(esp_http_client_event_t *evt) {
 static void ota_task_entry(void *pvParameter) {
     char *url = (char *)pvParameter;
     ESP_LOGI(TAG, "Starting OTA update task from %s", url);
+    ota_set_progress(0);
     report_ota_status("start", 0, "Starting update");
 
     esp_http_client_config_t config = {
@@ -99,6 +144,7 @@ static void ota_task_entry(void *pvParameter) {
         snprintf(msg, sizeof(msg), "OTA begin failed: %s", esp_err_to_name(err));
         ESP_LOGE(TAG, "ESP HTTPS OTA Begin failed: %s (0x%x)", esp_err_to_name(err), err);
         report_ota_status("failed", 0, msg);
+        ota_end();
         free(url);
         vTaskDelete(NULL);
         return;
@@ -112,6 +158,7 @@ static void ota_task_entry(void *pvParameter) {
         ESP_LOGE(TAG, "esp_https_ota_get_img_desc failed: %s", esp_err_to_name(err));
         esp_https_ota_abort(https_ota_handle);
         report_ota_status("failed", 0, msg);
+        ota_end();
         free(url);
         vTaskDelete(NULL);
         return;
@@ -129,6 +176,7 @@ static void ota_task_entry(void *pvParameter) {
         int total_len = esp_https_ota_get_image_size(https_ota_handle);
         int progress = (total_len > 0) ? (read_len * 100 / total_len) : 0;
         last_progress_value = progress;
+        ota_set_progress(progress);
         
         if (progress != last_progress && progress % 10 == 0) {
             ESP_LOGI(TAG, "OTA Progress: %d%%", progress);
@@ -142,6 +190,7 @@ static void ota_task_entry(void *pvParameter) {
     if (total_len > 0) {
         last_progress_value = read_len * 100 / total_len;
     }
+    ota_set_progress(last_progress_value);
 
     if (err != ESP_OK) {
         char msg[80];
@@ -150,6 +199,7 @@ static void ota_task_entry(void *pvParameter) {
                  esp_err_to_name(err), err, read_len, total_len, last_progress_value);
         esp_https_ota_abort(https_ota_handle);
         report_ota_status("failed", last_progress_value, msg);
+        ota_end();
         free(url);
         vTaskDelete(NULL);
         return;
@@ -158,8 +208,10 @@ static void ota_task_entry(void *pvParameter) {
     esp_err_t finish_err = esp_https_ota_finish(https_ota_handle);
     if (finish_err == ESP_OK) {
         ESP_LOGI(TAG, "OTA upgrade successful. Rebooting...");
+        ota_set_progress(100);
         report_ota_status("success", 100, "Rebooting");
         vTaskDelay(1000 / portTICK_PERIOD_MS);
+        ota_end();
         esp_restart();
     } else {
         char msg[80];
@@ -167,6 +219,7 @@ static void ota_task_entry(void *pvParameter) {
         ESP_LOGE(TAG, "OTA finish failed: %s (0x%x), read=%d/%d, progress=%d%%",
                  esp_err_to_name(finish_err), finish_err, read_len, total_len, last_progress_value);
         report_ota_status("failed", last_progress_value, msg);
+        ota_end();
     }
     
     free(url);
@@ -174,12 +227,31 @@ static void ota_task_entry(void *pvParameter) {
 }
 
 void ota_perform_update(const char *url) {
-    if (url == NULL) return;
+    if (url == NULL || url[0] == '\0') {
+        ESP_LOGE(TAG, "OTA update command missing URL");
+        report_ota_status("failed", 0, "Missing URL");
+        return;
+    }
+
+    if (!ota_try_begin()) {
+        ESP_LOGW(TAG, "OTA update ignored: already in progress");
+        report_ota_status("busy", ota_get_progress(), "OTA already in progress");
+        return;
+    }
+
     char *url_copy = strdup(url);
     if (url_copy) {
-        xTaskCreate(ota_task_entry, "ota_task", 8192, url_copy, 5, NULL);
+        BaseType_t ret = xTaskCreate(ota_task_entry, "ota_task", 8192, url_copy, 5, NULL);
+        if (ret != pdPASS) {
+            ESP_LOGE(TAG, "Failed to create OTA task");
+            report_ota_status("failed", 0, "Failed to create OTA task");
+            free(url_copy);
+            ota_end();
+        }
     } else {
         ESP_LOGE(TAG, "Failed to allocate memory for URL");
+        report_ota_status("failed", 0, "Failed to allocate URL");
+        ota_end();
     }
 }
 

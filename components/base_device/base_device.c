@@ -18,6 +18,7 @@
 #include "Battery.h"
 
 __attribute__((weak)) void device_ble_update_property(int index) {}
+__attribute__((weak)) void device_ble_send_message(const char *message) {}
 
 static const char *TAG = "base_device";
 static const esp_app_desc_t *app_desc = NULL;
@@ -41,16 +42,16 @@ void update_last_msg_time(void){
 static esp_timer_handle_t led_blink_timer = NULL;
 static esp_timer_handle_t led_off_timer = NULL;
 static bool led_blink_active = false;
+static bool led_state = false;
 #endif
 
 
 #ifdef CONNECTED_LED
 static void led_blink_callback(void* arg)
 {
-    static bool led_state = false;
     if (led_blink_active) {
         led_state = !led_state;
-        gpio_set_level(CONNECTED_LED, led_state ? 0 : 1);
+        gpio_set_level(CONNECTED_LED, led_state ? !CONNECTED_CLOSED_LED_LEVEL : CONNECTED_CLOSED_LED_LEVEL);
     }
 }
 
@@ -81,6 +82,8 @@ static void led_start_blink(void)
     }
     
     led_blink_active = true;
+    led_state = false;
+    esp_timer_stop(led_blink_timer);
     esp_timer_start_periodic(led_blink_timer, 1000000);  // 每秒闪烁一次
 }
 
@@ -103,8 +106,34 @@ static void led_constant_on_then_off(void)
         };
         esp_timer_create(&off_timer_args, &led_off_timer);
     }
-    
+    esp_timer_stop(led_off_timer);
     esp_timer_start_once(led_off_timer, 10000000);  // 10秒后关闭
+}
+
+static void led_fast_blink_for_three_seconds(void)
+{
+    if (led_blink_timer == NULL) {
+        const esp_timer_create_args_t blink_timer_args = {
+            .callback = &led_blink_callback,
+            .name = "led_blink"
+        };
+        esp_timer_create(&blink_timer_args, &led_blink_timer);
+    }
+    if (led_off_timer == NULL) {
+        const esp_timer_create_args_t off_timer_args = {
+            .callback = &led_off_callback,
+            .name = "led_off"
+        };
+        esp_timer_create(&off_timer_args, &led_off_timer);
+    }
+
+    esp_timer_stop(led_blink_timer);
+    esp_timer_stop(led_off_timer);
+    led_blink_active = true;
+    led_state = false;
+    gpio_set_level(CONNECTED_LED, !CONNECTED_CLOSED_LED_LEVEL);
+    esp_timer_start_periodic(led_blink_timer, 100000);
+    esp_timer_start_once(led_off_timer, 3000000);
 }
 #endif
 
@@ -235,25 +264,45 @@ void device_init(void)
 }
 
 
-void mqtt_msg_process(char *topic, int topic_len, char *data, int data_len)
+void device_handle_action(cJSON *root)
+{
+    cJSON *method_item = cJSON_GetObjectItem(root, "method");
+    cJSON *action_item = cJSON_GetObjectItem(root, "action");
+    if (cJSON_IsString(method_item) && cJSON_IsString(action_item) &&
+        strcmp(method_item->valuestring, "action") == 0 &&
+        strcmp(action_item->valuestring, "blink") == 0) {
+#ifdef CONNECTED_LED
+        ESP_LOGI(TAG, "handle common action: blink");
+        led_fast_blink_for_three_seconds();
+#else
+        ESP_LOGI(TAG, "common action blink ignored: CONNECTED_LED not configured");
+#endif
+        return;
+    }
+
+    on_action(root);
+}
+
+void device_handle_receive(char *topic, int topic_len, char *data, int data_len)
 {
     ESP_LOGI(TAG, "mqtt_msg_process topic: %.*s, data: %.*s", topic_len, topic, data_len, data);
     // convert data to json
-    cJSON *root = cJSON_Parse(data);
-    int msg_id = -1;
-    if (cJSON_GetObjectItem(root, "msg_id"))
-    {
-        msg_id = cJSON_GetObjectItem(root, "msg_id")->valueint;
-    }
+    cJSON *root = cJSON_ParseWithLength(data, data_len);
     if (root == NULL)
     {
         ESP_LOGE(TAG, "cJSON_Parse error");
         return;
     }
-    // get method
-    if (cJSON_GetObjectItem(root, "method"))
+    int msg_id = -1;
+    if (cJSON_GetObjectItem(root, "msg_id"))
     {
-        char *method = cJSON_GetObjectItem(root, "method")->valuestring;
+        msg_id = cJSON_GetObjectItem(root, "msg_id")->valueint;
+    }
+    // get method
+    cJSON *method_item = cJSON_GetObjectItem(root, "method");
+    if (cJSON_IsString(method_item))
+    {
+        char *method = method_item->valuestring;
         //ESP_LOGI(TAG, "method: %s", method);
         // if method is set, then set property
         if (strcmp(method, "set") == 0)
@@ -308,13 +357,18 @@ void mqtt_msg_process(char *topic, int topic_len, char *data, int data_len)
         }
         else{
             // do action
-            on_action(root);
+            device_handle_action(root);
         }
     }
     on_mqtt_msg_process(topic, root);
     // free cJSON
     cJSON_Delete(root);
     update_last_msg_time();
+}
+
+void mqtt_msg_process(char *topic, int topic_len, char *data, int data_len)
+{
+    device_handle_receive(topic, topic_len, data, data_len);
 }
 
 void set_property(char *property_name, cJSON *property_value, int msg_id)
@@ -404,6 +458,11 @@ void mqtt_publish(cJSON *root){
     }
     cJSON_Delete(root);
     
+}
+
+void device_send_ble_message(const char *message)
+{
+    device_ble_send_message(message);
 }
 
 void device_update_property_int(const char *name, int v){

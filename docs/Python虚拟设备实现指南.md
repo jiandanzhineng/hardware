@@ -85,6 +85,10 @@ class MyDevice(BaseVirtualDevice):
 ```json
 {"method":"action","action":"key_clicked"}
 ```
+- 通用 blink 动作（action）
+```json
+{"method":"action","action":"blink"}
+```
 
 ## 调试与测试
 - 启动MQTT代理（Mosquitto等），或使用Docker快速启动

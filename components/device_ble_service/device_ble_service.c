@@ -16,12 +16,14 @@
 #define SERVICE_UUID        0x00FF
 #define CHAR_UUID           0xFF01
 #define MODE_CHAR_UUID      0xFF02
+#define COMMAND_CHAR_UUID   0xFF03
 #define APP_ID              1
+#define BLE_MESSAGE_MAX_LEN 256
 
 static esp_gatts_attr_db_t *gatt_db = NULL;
 static uint16_t *handle_table = NULL;
 static int total_attr_count = 0;
-static int base_attr_count = 5;
+static int base_attr_count = 8;
 static esp_gatt_if_t s_gatts_if = 0;
 static int conn_id_last = -1;
 extern device_property_t *device_properties[];
@@ -36,15 +38,33 @@ static uint8_t *prop_notify_enabled = NULL;
 static uint16_t *prop_uuid16_arr = NULL;
 static uint8_t *prop_char_props_arr = NULL;
 static bool s_ble_service_started = false;
+static uint8_t s_message_value[BLE_MESSAGE_MAX_LEN] = {0};
+static uint16_t s_message_value_len = 0;
+static uint8_t s_message_cccd[2] = {0};
+static uint8_t s_message_notify_enabled = 0;
 
 static const uint16_t primary_service_uuid = ESP_GATT_UUID_PRI_SERVICE;
 static const uint16_t character_declaration_uuid = ESP_GATT_UUID_CHAR_DECLARE;
+static const uint16_t cccd_uuid = ESP_GATT_UUID_CHAR_CLIENT_CONFIG;
+static const uint8_t char_prop_read_notify = ESP_GATT_CHAR_PROP_BIT_READ | ESP_GATT_CHAR_PROP_BIT_NOTIFY;
 static const uint8_t char_prop_write = ESP_GATT_CHAR_PROP_BIT_WRITE | ESP_GATT_CHAR_PROP_BIT_WRITE_NR;
 static const uint16_t service_uuid = SERVICE_UUID;
 static const uint16_t char_uuid = CHAR_UUID;
-static const uint8_t char_value[1] = {0x00};
 static const uint16_t mode_char_uuid = MODE_CHAR_UUID;
 static uint8_t mode_value[1] = {0x00};
+static const uint16_t command_char_uuid = COMMAND_CHAR_UUID;
+static uint8_t command_value[BLE_MESSAGE_MAX_LEN] = {0};
+
+enum {
+    IDX_SERVICE = 0,
+    IDX_MESSAGE_CHAR,
+    IDX_MESSAGE_VAL,
+    IDX_MESSAGE_CCCD,
+    IDX_MODE_CHAR,
+    IDX_MODE_VAL,
+    IDX_COMMAND_CHAR,
+    IDX_COMMAND_VAL,
+};
 
 static void build_gatt_table(void) {
     int include_count = 0;
@@ -99,17 +119,26 @@ static void build_gatt_table(void) {
     gatt_db[idx].att_desc.uuid_p = (uint8_t *)&character_declaration_uuid;
     gatt_db[idx].att_desc.perm = ESP_GATT_PERM_READ;
     gatt_db[idx].att_desc.max_length = sizeof(uint8_t);
-    gatt_db[idx].att_desc.length = sizeof(char_prop_write);
-    gatt_db[idx].att_desc.value = (uint8_t *)&char_prop_write;
+    gatt_db[idx].att_desc.length = sizeof(char_prop_read_notify);
+    gatt_db[idx].att_desc.value = (uint8_t *)&char_prop_read_notify;
     idx++;
 
     gatt_db[idx].attr_control.auto_rsp = ESP_GATT_AUTO_RSP;
     gatt_db[idx].att_desc.uuid_length = ESP_UUID_LEN_16;
     gatt_db[idx].att_desc.uuid_p = (uint8_t *)&char_uuid;
-    gatt_db[idx].att_desc.perm = ESP_GATT_PERM_WRITE;
-    gatt_db[idx].att_desc.max_length = sizeof(char_value);
-    gatt_db[idx].att_desc.length = sizeof(char_value);
-    gatt_db[idx].att_desc.value = (uint8_t *)char_value;
+    gatt_db[idx].att_desc.perm = ESP_GATT_PERM_READ;
+    gatt_db[idx].att_desc.max_length = BLE_MESSAGE_MAX_LEN;
+    gatt_db[idx].att_desc.length = s_message_value_len;
+    gatt_db[idx].att_desc.value = s_message_value;
+    idx++;
+
+    gatt_db[idx].attr_control.auto_rsp = ESP_GATT_AUTO_RSP;
+    gatt_db[idx].att_desc.uuid_length = ESP_UUID_LEN_16;
+    gatt_db[idx].att_desc.uuid_p = (uint8_t *)&cccd_uuid;
+    gatt_db[idx].att_desc.perm = ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE;
+    gatt_db[idx].att_desc.max_length = sizeof(s_message_cccd);
+    gatt_db[idx].att_desc.length = sizeof(s_message_cccd);
+    gatt_db[idx].att_desc.value = s_message_cccd;
     idx++;
 
     gatt_db[idx].attr_control.auto_rsp = ESP_GATT_AUTO_RSP;
@@ -128,6 +157,24 @@ static void build_gatt_table(void) {
     gatt_db[idx].att_desc.max_length = sizeof(mode_value);
     gatt_db[idx].att_desc.length = sizeof(mode_value);
     gatt_db[idx].att_desc.value = (uint8_t *)mode_value;
+    idx++;
+
+    gatt_db[idx].attr_control.auto_rsp = ESP_GATT_AUTO_RSP;
+    gatt_db[idx].att_desc.uuid_length = ESP_UUID_LEN_16;
+    gatt_db[idx].att_desc.uuid_p = (uint8_t *)&character_declaration_uuid;
+    gatt_db[idx].att_desc.perm = ESP_GATT_PERM_READ;
+    gatt_db[idx].att_desc.max_length = sizeof(uint8_t);
+    gatt_db[idx].att_desc.length = sizeof(char_prop_write);
+    gatt_db[idx].att_desc.value = (uint8_t *)&char_prop_write;
+    idx++;
+
+    gatt_db[idx].attr_control.auto_rsp = ESP_GATT_AUTO_RSP;
+    gatt_db[idx].att_desc.uuid_length = ESP_UUID_LEN_16;
+    gatt_db[idx].att_desc.uuid_p = (uint8_t *)&command_char_uuid;
+    gatt_db[idx].att_desc.perm = ESP_GATT_PERM_WRITE;
+    gatt_db[idx].att_desc.max_length = BLE_MESSAGE_MAX_LEN;
+    gatt_db[idx].att_desc.length = 0;
+    gatt_db[idx].att_desc.value = command_value;
     idx++;
 
     for (int i = 0; i < device_properties_num; i++) {
@@ -189,7 +236,6 @@ static void build_gatt_table(void) {
         idx++;
 
         if (p->readable) {
-            static const uint16_t cccd_uuid = ESP_GATT_UUID_CHAR_CLIENT_CONFIG;
             prop_cccd_buf[i] = (uint8_t *)malloc(2);
             prop_cccd_buf[i][0] = 0;
             prop_cccd_buf[i][1] = 0;
@@ -239,17 +285,14 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_
         case ESP_GATTS_WRITE_EVT:
             ESP_LOGI(TAG, "ESP_GATTS_WRITE_EVT, conn_id = %d, handle = %d, len = %d", param->write.conn_id, param->write.handle, param->write.len);
             conn_id_last = param->write.conn_id;
-            if (handle_table[2] == param->write.handle) {
-                ESP_LOGI(TAG, "Received %d bytes:", param->write.len);
-                esp_log_buffer_hex(TAG, param->write.value, param->write.len);
-                char *str = malloc(param->write.len + 1);
-                if (str) {
-                    memcpy(str, param->write.value, param->write.len);
-                    str[param->write.len] = 0;
-                    ESP_LOGI(TAG, "String: %s", str);
-                    free(str);
+            if (handle_table[IDX_MESSAGE_CCCD] == param->write.handle) {
+                if (param->write.len >= 2) {
+                    uint16_t cfg = param->write.value[0] | (param->write.value[1] << 8);
+                    s_message_cccd[0] = param->write.value[0];
+                    s_message_cccd[1] = param->write.value[1];
+                    s_message_notify_enabled = (cfg == 0x0001);
                 }
-            } else if (handle_table[4] == param->write.handle) {
+            } else if (handle_table[IDX_MODE_VAL] == param->write.handle) {
                 if (param->write.len > 0) {
                     uint8_t v = param->write.value[0];
                     mode_value[0] = v;
@@ -264,6 +307,10 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_
                         ESP_LOGI(TAG, "Mode: WiFi");
                     }
                 }
+            } else if (handle_table[IDX_COMMAND_VAL] == param->write.handle) {
+                ESP_LOGI(TAG, "Received command %d bytes:", param->write.len);
+                esp_log_buffer_hex(TAG, param->write.value, param->write.len);
+                device_handle_receive("ble", 3, (char *)param->write.value, param->write.len);
             } else {
                 for (int i = 0; i < device_properties_num; i++) {
                     if (prop_value_index[i] >= 0 && handle_table[prop_value_index[i]] == param->write.handle) {
@@ -337,6 +384,10 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_
 
 void device_ble_service_init(void) {
     s_ble_service_started = true;
+    s_message_value_len = 0;
+    s_message_cccd[0] = 0;
+    s_message_cccd[1] = 0;
+    s_message_notify_enabled = 0;
     ESP_ERROR_CHECK(esp_ble_gatts_register_callback(gatts_profile_event_handler));
     ESP_ERROR_CHECK(esp_ble_gatts_app_register(APP_ID));
 }
@@ -378,6 +429,33 @@ void device_ble_service_deinit(void) {
     prop_char_props_arr = NULL;
     total_attr_count = 0;
     s_ble_service_started = false;
+    s_message_value_len = 0;
+    s_message_cccd[0] = 0;
+    s_message_cccd[1] = 0;
+    s_message_notify_enabled = 0;
+}
+
+void device_ble_send_message(const char *message) {
+    if (!message) {
+        return;
+    }
+
+    size_t len = strnlen(message, BLE_MESSAGE_MAX_LEN);
+    if (len >= BLE_MESSAGE_MAX_LEN) {
+        len = BLE_MESSAGE_MAX_LEN - 1;
+    }
+    memcpy(s_message_value, message, len);
+    s_message_value[len] = 0;
+    s_message_value_len = (uint16_t)len;
+
+    if (!s_ble_service_started || !handle_table) {
+        return;
+    }
+
+    esp_ble_gatts_set_attr_value(handle_table[IDX_MESSAGE_VAL], s_message_value_len, s_message_value);
+    if (s_message_notify_enabled && conn_id_last >= 0) {
+        esp_ble_gatts_send_indicate(s_gatts_if, conn_id_last, handle_table[IDX_MESSAGE_VAL], s_message_value_len, s_message_value, false);
+    }
 }
 
 void device_ble_update_property(int i){

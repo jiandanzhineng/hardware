@@ -34,11 +34,12 @@
   - 作用：周期性全量属性上报
   - 格式：`{"method":"report", "<属性1>":<值1>, "<属性2>":<值2> ...}`
   - 示例：`{"method":"report","device_type":"QIYA","battery":85,"sleep_time":7200}`
-- action（发）
+- action（收/发）
 
-  - 作用：事件上报（如按键、紧急状态）
+  - 作用：事件上报或通用动作命令（如按键、紧急状态、指示灯闪烁）
   - 格式：`{"method":"action","action":"<事件名>"}`
-  - 示例：`{"method":"action","action":"key_clicked"}`、`{"method":"action","action":"emergency_open"}`
+  - 示例：`{"method":"action","action":"key_clicked"}`、`{"method":"action","action":"emergency_open"}`、`{"method":"action","action":"blink"}`
+  - 通用命令：`blink` 会让支持 connected LED 的设备快速闪烁 3 秒
 - low（发）（新设备不再使用，统一使用action）
 
   - 作用：阈值事件（低阈触发）

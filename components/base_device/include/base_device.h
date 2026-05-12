@@ -87,11 +87,14 @@
 
 
 void mqtt_msg_process(char *topic, int topic_len, char *data, int data_len);
+void device_handle_receive(char *topic, int topic_len, char *data, int data_len);
+void device_handle_action(cJSON *root);
 void set_property(char *property_name, cJSON *property_value, int msg_id);
 void get_property(char *property_name, int msg_id);
 void device_init(void);
 void device_first_ready(void);
 void mqtt_publish(cJSON *root);
+void device_send_ble_message(const char *message);
 void update_last_msg_time(void);
 static void report_all_properties(void);
 static void heartbeat_task(void);

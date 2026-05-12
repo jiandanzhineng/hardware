@@ -14,7 +14,9 @@ APP 通过 BLE 连接 `CUNZHI01` 设备，完成以下能力：
 ## 2. BLE接入方式
 
 - 服务 UUID：`0x00FF`
+- 设备消息特征：`0xFF01`，APP 可读取最近一条消息或订阅通知
 - 模式特征：`0xFF02`
+- 命令写入特征：`0xFF03`，APP 向设备写入 UTF-8 JSON 命令，例如 `{"method":"action","action":"blink"}`
 - 连接后先向 `0xFF02` 写入 `0x01`，切换到 BLE 模式
 - 各属性特征通过 `0x2901 User Description` 查找，描述文本就是属性名，例如 `power`、`pressure`、`game_mode`
 
