@@ -302,7 +302,9 @@ class DianjiDevice(BaseVirtualDevice):
         """电击设备属性变化处理"""
         if property_name == "voltage":
             self.target_voltage = float(value)
-            self.logger.info(f"Target voltage set to {value}V")
+            self.current_voltage = float(value)
+            self.properties["voltage"]["value"] = int(self.current_voltage)
+            self.logger.info(f"Voltage set to {value}V")
         elif property_name == "shock":
             if value:
                 self.logger.warning("SHOCK ACTIVATED!")
@@ -316,24 +318,15 @@ class DianjiDevice(BaseVirtualDevice):
         pass
     
     def _voltage_control_task(self):
-        """电压控制任务 - 模拟PID控制"""
+        """电压监测任务 - 电压设置时已直接到位，这里仅保持状态同步"""
         while self.running:
             try:
-                # 模拟电压逐渐调整到目标值
-                if abs(self.current_voltage - self.target_voltage) > 0.1:
-                    if self.current_voltage < self.target_voltage:
-                        self.current_voltage += 0.5
-                    else:
-                        self.current_voltage -= 0.5
-                
-                # 更新电压属性
+                # 电压直接跟随目标值，无渐变爬升
+                self.current_voltage = self.target_voltage
                 self.properties["voltage"]["value"] = int(self.current_voltage)
-                
-                # 模拟电池电压变化
-                bat_voltage = 3.7 + random.uniform(-0.2, 0.2)
-                
+
                 time.sleep(1)
-                
+
             except Exception as e:
                 self.logger.error(f"Error in voltage control: {e}")
 

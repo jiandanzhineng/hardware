@@ -68,11 +68,7 @@ void button_single_click_cb(void *arg, void *usr_data)
     cJSON *root = cJSON_CreateObject();
     cJSON_AddStringToObject(root, "method", "action");
     cJSON_AddStringToObject(root, "action", "key_clicked");
-    char *json_data = cJSON_Print(root);
-    ESP_LOGI(TAG, "json_data: %s", json_data);
-    esp_mqtt_client_publish(smqtt_client, publish_topic, json_data, 0, 1, 0);
-    cJSON_Delete(root);
-    free(json_data);
+    device_publish_event(root);
 }
 
 void button_press_down_cb(void *arg, void *usr_data)
@@ -287,11 +283,7 @@ void emergency_mode_task(void *pvParameters)
             cJSON *root = cJSON_CreateObject();
             cJSON_AddStringToObject(root, "method", "action");
             cJSON_AddStringToObject(root, "action", "emergency_open");
-            char *json_data = cJSON_Print(root);
-            ESP_LOGI(TAG, "Emergency open json_data: %s", json_data);
-            esp_mqtt_client_publish(smqtt_client, publish_topic, json_data, 0, 1, 0);
-            cJSON_Delete(root);
-            free(json_data);
+            device_publish_event(root);
             
             // Wait for 10 seconds before next emergency open
             vTaskDelay(pdMS_TO_TICKS(10000));

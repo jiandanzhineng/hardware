@@ -442,6 +442,7 @@ void device_ble_send_message(const char *message) {
 
     size_t len = strnlen(message, BLE_MESSAGE_MAX_LEN);
     if (len >= BLE_MESSAGE_MAX_LEN) {
+        ESP_LOGW(TAG, "ble message truncated: %u >= %d", (unsigned)len, BLE_MESSAGE_MAX_LEN);
         len = BLE_MESSAGE_MAX_LEN - 1;
     }
     memcpy(s_message_value, message, len);

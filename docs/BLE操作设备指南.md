@@ -99,6 +99,13 @@ async def main():
 asyncio.run(main())
 ```
 
+- 设备会从 `0xFF01` 主动推送非属性类消息（action/event），与 WiFi 模式下经 MQTT 发出的内容一致。例如：
+  - QTZ：`{"method":"low"}`、`{"method":"high"}`
+  - TD01：`{"method":"action","action":"key_boot_clicked"}`
+  - 自动锁：`{"method":"action","action":"key_clicked"}`、`{"method":"action","action":"emergency_open"}`
+- 属性值的变化不走 `0xFF01`，请订阅对应属性特征（见第 6 节）
+- 单条消息上限 256 字节，超出会被截断（设备端打印告警）
+
 **6. 如何使用设备（以 DIANJI 为例）**
 
 - 思路：通过“用户描述”找到属性特征（例如 `voltage`、`shock`），对其值特征执行读/写；如需接收变化，订阅该特征通知

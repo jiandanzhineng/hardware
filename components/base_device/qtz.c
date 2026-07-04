@@ -152,6 +152,7 @@ int device_properties_num = sizeof(device_properties) / sizeof(device_properties
 
 extern void get_property(char *property_name, int msg_id);
 extern void mqtt_publish(cJSON *root);
+extern void device_publish_event(cJSON *root);
 
 float average_length_mm = 0;
 
@@ -560,7 +561,7 @@ void update_in_state(void)
             ESP_LOGI(TAG, "low_state_flag change to %d average_length_mm=%.2f", low_state_flag, average_length_mm);
                         cJSON *root = cJSON_CreateObject();
             cJSON_AddStringToObject(root, "method", "low");
-            mqtt_publish(root);
+            device_publish_event(root);
         }
     }
 
@@ -577,25 +578,9 @@ void update_in_state(void)
             ESP_LOGI(TAG, "high_state_flag change to %d average_length_mm=%.2f", high_state_flag, average_length_mm);
             cJSON *root = cJSON_CreateObject();
             cJSON_AddStringToObject(root, "method", "high");
-            mqtt_publish(root);
+            device_publish_event(root);
         }
     }
-}
-
-void report_all_properties(void)
-{
-    ESP_LOGI(TAG, "report_all_properties");
-    // build json
-    cJSON *root = cJSON_CreateObject();
-    cJSON_AddStringToObject(root, "method", "report");
-    cJSON_AddStringToObject(root, "device_type", device_type_property.value.string_value);
-    cJSON_AddNumberToObject(root, "distance", distance_property.value.float_value);
-    cJSON_AddNumberToObject(root, "report_delay_ms", report_delay_ms_property.value.int_value);
-    char *json_data = cJSON_Print(root);
-    // publish
-    esp_mqtt_client_publish(smqtt_client, publish_topic, json_data, 0, 1, 0);
-    free(json_data);
-    cJSON_Delete(root);
 }
 
 void on_device_init(void)

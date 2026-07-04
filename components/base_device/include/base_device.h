@@ -94,6 +94,10 @@ void get_property(char *property_name, int msg_id);
 void device_init(void);
 void device_first_ready(void);
 void mqtt_publish(cJSON *root);
+// 统一的事件/动作发送入口：WiFi 模式走 MQTT，BLE 模式走 0xFF01 Message 特征。
+// 仅用于 action/event 类（非属性）消息；属性值在 BLE 下走 GATT 属性特征。
+// 负责释放传入的 root。
+void device_publish_event(cJSON *root);
 void device_send_ble_message(const char *message);
 void update_last_msg_time(void);
 static void report_all_properties(void);

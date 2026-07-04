@@ -457,7 +457,22 @@ void mqtt_publish(cJSON *root){
         free(json_data);
     }
     cJSON_Delete(root);
-    
+
+}
+
+void device_publish_event(cJSON *root){
+    char *json_data = cJSON_PrintUnformatted(root);
+    if(json_data){
+        if(g_device_mode == MODE_WIFI){
+            ESP_LOGI(TAG, "publish_event(mqtt): %s", json_data);
+            esp_mqtt_client_publish(smqtt_client, publish_topic, json_data, 0, 1, 0);
+        } else if(g_device_mode == MODE_BLE){
+            ESP_LOGI(TAG, "publish_event(ble): %s", json_data);
+            device_ble_send_message(json_data);
+        }
+        free(json_data);
+    }
+    cJSON_Delete(root);
 }
 
 void device_send_ble_message(const char *message)
