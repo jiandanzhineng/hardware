@@ -65,6 +65,7 @@ device_property_t game_m_power_property;
 device_property_t game_m_step_property;
 device_property_t game_cooldown_property;
 device_property_t game_kegel_t_property;
+device_property_t game_cz_count_property;
 
 extern device_property_t device_type_property;
 extern device_property_t sleep_time_property;
@@ -94,6 +95,7 @@ device_property_t *device_properties[] = {
     &game_m_step_property,
     &game_cooldown_property,
     &game_kegel_t_property,
+    &game_cz_count_property,
 };
 
 int device_properties_num = sizeof(device_properties) / sizeof(device_properties[0]);
@@ -264,6 +266,12 @@ void init_properties(void) {
     strcpy(game_kegel_t_property.name, "game_kegel_t");
     game_kegel_t_property.value_type = PROPERTY_TYPE_INT;
     game_kegel_t_property.value.int_value = 0;
+
+    game_cz_count_property.readable = true;
+    game_cz_count_property.writeable = true;
+    strcpy(game_cz_count_property.name, "game_cz_count");
+    game_cz_count_property.value_type = PROPERTY_TYPE_INT;
+    game_cz_count_property.value.int_value = 0;
 }
 
 void on_device_init(void) {
@@ -624,6 +632,7 @@ static void report_task(void *arg) {
         cJSON_AddNumberToObject(root, "pressure", pressure_property.value.float_value);
         cJSON_AddNumberToObject(root, "pressure1", pressure1_property.value.float_value);
         cJSON_AddNumberToObject(root, "battery", battery_property.value.int_value);
+        cJSON_AddNumberToObject(root, "game_cz_count", game_cz_count_property.value.int_value);
         
         // Also report status
         mqtt_publish(root);
@@ -642,6 +651,8 @@ static int64_t cooldown_end_time = 0;
 static float current_motor_power = 0.0f;
 static int no_kegel_time_ms = 0;
 static int last_game_mode = 0;
+static bool cunzhi_count_armed = true;
+static int64_t cunzhi_below_threshold_since = 0;
 
 static void gameplay_task(void *arg) {
     while (1) {
@@ -657,7 +668,12 @@ static void gameplay_task(void *arg) {
             cooldown_end_time = 0;
             current_motor_power = 0.0f;
             no_kegel_time_ms = 0;
-            
+            cunzhi_count_armed = true;
+            cunzhi_below_threshold_since = 0;
+
+            // Reset cunzhi count on game start / mode switch
+            device_update_property_int("game_cz_count", 0);
+
             // Turn off outputs if mode changed
             motor_control(0);
             boost_control(0);
@@ -695,6 +711,17 @@ static void gameplay_task(void *arg) {
             int cooldown = game_cooldown_property.value.int_value;
             int fly_dur_s = game_fly_dur_property.value.int_value;
 
+            if (p1 < p1_thresh) {
+                if (cunzhi_below_threshold_since == 0) {
+                    cunzhi_below_threshold_since = current_time;
+                } else if (!cunzhi_count_armed &&
+                           current_time - cunzhi_below_threshold_since >= 5000000LL) {
+                    cunzhi_count_armed = true;
+                }
+            } else {
+                cunzhi_below_threshold_since = 0;
+            }
+
             bool is_flying = false;
             if (duration_s > 0 && fly_dur_s > 0) {
                 int64_t time_elapsed = current_time - game_start_time;
@@ -726,6 +753,11 @@ static void gameplay_task(void *arg) {
 
                     active_e_stim_end = current_time + (int64_t)e_dur * 1000;
                     cooldown_end_time = active_e_stim_end + (int64_t)cooldown * 1000;
+
+                    if (cunzhi_count_armed) {
+                        device_update_property_int("game_cz_count", game_cz_count_property.value.int_value + 1);
+                        cunzhi_count_armed = false;
+                    }
                 } else {
                     // Normal increase
                     current_motor_power += (m_step * 0.1f);
