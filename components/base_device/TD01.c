@@ -41,7 +41,7 @@ device_property_t *device_properties[] = {
     &battery_property,
 };
 
-int device_properties_num = sizeof(device_properties) / sizeof(device_properties[0]);
+DEVICE_PROPERTIES_NUM_DEFINE(device_properties);
 
 void button_single_click_cb(void *arg,void *usr_data)
 {

@@ -98,7 +98,7 @@ device_property_t *device_properties[] = {
     &game_cz_count_property,
 };
 
-int device_properties_num = sizeof(device_properties) / sizeof(device_properties[0]);
+DEVICE_PROPERTIES_NUM_DEFINE(device_properties);
 
 // Internal State
 static esp_timer_handle_t discharge_timer;

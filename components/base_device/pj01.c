@@ -52,7 +52,7 @@ device_property_t *device_properties[] = {
     &power_property,
 };
 
-int device_properties_num = sizeof(device_properties) / sizeof(device_properties[0]);
+DEVICE_PROPERTIES_NUM_DEFINE(device_properties);
 
 // 函数声明
 void init_gpio();

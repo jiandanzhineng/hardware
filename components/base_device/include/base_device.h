@@ -1,4 +1,5 @@
 
+#include "sdkconfig.h"
 #include "mqtt_client.h"
 #include "cJSON.h"
 #include "driver/ledc.h"
@@ -78,9 +79,28 @@
 #endif
 
 
-#ifndef DEVICE_TYPE_INDEX  
-    #error "Please select a device type in menuconfig."  
+#ifndef DEVICE_TYPE_INDEX
+    #error "Please select a device type in menuconfig."
 #endif
+
+// device_ble_service 为每个属性建 4 个 attribute（characteristic 声明、value、
+// CCCD、User Description），加上服务本身的 8 个固定 attribute。CCCD 只有
+// readable 属性才有，所以这是最坏情况的上界。
+#define DEVICE_BLE_BASE_ATTR_COUNT   8
+#define DEVICE_BLE_ATTR_PER_PROPERTY 4
+#define DEVICE_BLE_ATTR_COUNT_MAX(n) \
+    (DEVICE_BLE_BASE_ATTR_COUNT + (n) * DEVICE_BLE_ATTR_PER_PROPERTY)
+
+// 定义 device_properties_num，并在编译期确认 GATT 属性表不会超过
+// CONFIG_BT_GATT_MAX_SR_ATTRIBUTES —— 超了 esp_ble_gatts_create_attr_tab()
+// 只会返回 ESP_ERR_INVALID_ARG，服务永远起不来，设备能被扫描到却连不上。
+#define DEVICE_PROPERTIES_NUM_DEFINE(arr)                                      \
+    int device_properties_num = sizeof(arr) / sizeof((arr)[0]);                \
+    _Static_assert(                                                            \
+        DEVICE_BLE_ATTR_COUNT_MAX(sizeof(arr) / sizeof((arr)[0])) <=           \
+            CONFIG_BT_GATT_MAX_SR_ATTRIBUTES,                                  \
+        "GATT attribute table exceeds CONFIG_BT_GATT_MAX_SR_ATTRIBUTES; "      \
+        "raise it in sdkconfig.defaults or remove a property")
 
 #pragma message "DEVICE_TYPE_NAME: " DEVICE_TYPE_NAME
     

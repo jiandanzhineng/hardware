@@ -35,7 +35,7 @@ device_property_t *device_properties[] = {
     &sleep_time_property,
     &battery_property,
 };
-int device_properties_num = sizeof(device_properties) / sizeof(device_properties[0]);
+DEVICE_PROPERTIES_NUM_DEFINE(device_properties);
 
  
 

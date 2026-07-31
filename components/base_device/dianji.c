@@ -63,7 +63,7 @@ device_property_t *device_properties[] = {
     &safe_property,
 };
 
-int device_properties_num = sizeof(device_properties) / sizeof(device_properties[0]);
+DEVICE_PROPERTIES_NUM_DEFINE(device_properties);
 
 // 通过两个输出引脚控制放电
 #define O1 3

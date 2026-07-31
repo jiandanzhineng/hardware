@@ -23,7 +23,7 @@
 static esp_gatts_attr_db_t *gatt_db = NULL;
 static uint16_t *handle_table = NULL;
 static int total_attr_count = 0;
-static int base_attr_count = 8;
+static int base_attr_count = DEVICE_BLE_BASE_ATTR_COUNT;
 static esp_gatt_if_t s_gatts_if = 0;
 static int conn_id_last = -1;
 extern device_property_t *device_properties[];

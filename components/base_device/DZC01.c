@@ -57,7 +57,7 @@ device_property_t *device_properties[] = {
     &line2_text_property,
     &button2_property,
 };
-int device_properties_num = sizeof(device_properties) / sizeof(device_properties[0]);
+DEVICE_PROPERTIES_NUM_DEFINE(device_properties);
 
 extern void get_property(char *property_name, int msg_id);
 extern void mqtt_publish(cJSON *root);
