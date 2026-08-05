@@ -311,7 +311,9 @@ void device_init(void)
     battery_property.value_type = PROPERTY_TYPE_INT;
     battery_property.value.int_value = 0;
 
-    xTaskCreate(sleep_check_task, "sleep_check_task", 1024 * 2, NULL, 10, NULL);
+    if (xTaskCreate(sleep_check_task, "sleep_check_task", 1024 * 4, NULL, 10, NULL) != pdPASS) {
+        ESP_LOGE(TAG, "Failed to create sleep check task");
+    }
 
     on_device_init();
 

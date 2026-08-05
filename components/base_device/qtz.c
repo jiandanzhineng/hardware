@@ -218,20 +218,45 @@ esp_err_t on_device_first_ready(void)
 {
     ESP_LOGI(TAG, "device_first_ready");
 
-    ESP_ERROR_CHECK(i2c_master_init());
+    esp_err_t err = i2c_master_init();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "I2C initialization failed: %s", esp_err_to_name(err));
+        return err;
+    }
     ESP_LOGI(TAG, "I2C初始化完成");
-    ESP_ERROR_CHECK(vl6180x_init());
+
+    err = vl6180x_init();
+    if (err != ESP_OK) {
+        goto sensor_init_failed;
+    }
     ESP_LOGI(TAG, "VL6180X传感器初始化完成");
-    ESP_ERROR_CHECK(vl6180x_configure_default());
+
+    err = vl6180x_configure_default();
+    if (err != ESP_OK) {
+        goto sensor_init_failed;
+    }
     ESP_LOGI(TAG, "VL6180X传感器配置完成");
-    ESP_ERROR_CHECK(vl6180x_set_scaling(3));
+
+    err = vl6180x_set_scaling(3);
+    if (err != ESP_OK) {
+        goto sensor_init_failed;
+    }
     ESP_LOGI(TAG, "设置缩放为3");
     vl6180x_set_timeout(500);
     ESP_LOGI(TAG, "设置超时为500ms");
     if (xTaskCreate(check_distance_task, "check_distance_task", 1024 * 2, NULL, 10, NULL) != pdPASS) {
-        return ESP_ERR_NO_MEM;
+        err = ESP_ERR_NO_MEM;
+        goto sensor_init_failed;
     }
     return ESP_OK;
+
+sensor_init_failed:
+    ESP_LOGE(TAG, "VL6180X initialization failed: %s", esp_err_to_name(err));
+    esp_err_t delete_err = i2c_driver_delete(I2C_MASTER_NUM);
+    if (delete_err != ESP_OK) {
+        ESP_LOGW(TAG, "I2C cleanup failed: %s", esp_err_to_name(delete_err));
+    }
+    return err;
 }
 
 // I2C写入16位寄存器
