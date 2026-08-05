@@ -63,15 +63,19 @@ MQTT 下行 -----+
 1. 先使串口消息出口可用，但暂不接收业务命令。
 2. 如果设备尚未 first ready，则触发一次设备 first ready 初始化。
 3. 初始化完成后切换到串口调试 `ACTIVE` 状态。
-4. 通过统一串口输出出口返回一条完整的就绪标记：
+4. 通过统一串口输出出口返回一条带设备身份的完整就绪标记：
 
 ```text
-@DEBUG READY
+@DEBUG READY {"device_id":"aabbccddeeff","firmware_version":"v1.1.38"}
 ```
 
-主机只有收到 `@DEBUG READY` 后，才开始发送 `@CMD` 并解析 `@MSG`。启动命令是串口控制命令，不属于 MQTT 业务协议。
+`device_id` 是 `esp_efuse_mac_get_default()` 返回的 6 字节基础 MAC，编码为 12 位小写、无分隔符字符串，与 MQTT topic 使用的设备 ID 相同。`firmware_version` 原样读取 `esp_ota_get_app_description()->version`，包括 `PROJECT_VER` 中的前导 `v`。身份载荷由公共 `device_identity` 模块使用 cJSON 生成，串口与 BLE 不分别拼接 JSON。
+
+主机只有收到字段完整且格式合法的新版 `@DEBUG READY` 后，才开始发送 `@CMD` 并解析 `@MSG`。仅返回 `@DEBUG READY` 的旧固件不允许以 COM 口生成临时身份，主机必须拒绝并释放该端口。启动命令是串口控制命令，不属于 MQTT 业务协议。
 
 first ready 初始化期间不向主机输出 `@MSG`；进入 `ACTIVE` 后主动发送一次当前属性快照，保证主机获得完整初始状态。
+
+设备在 `ACTIVE` 状态再次收到 `@DEBUG START` 时，也必须重新返回完整的身份 READY，随后重新发送当前属性快照。这样主机可重复握手，不需要为了确认端口身份而复位设备。
 
 设备复位后调试状态自动关闭。是否增加主动停止命令，可在实现阶段按调试工具需要决定。
 
@@ -96,7 +100,7 @@ first ready 初始化期间不向主机输出 `@MSG`；进入 `ACTIVE` 后主动
 - `@CMD` 和 `@MSG` 仅用于在单串口中识别帧类型。
 - 前缀后的 JSON 内容与 MQTT payload 保持一致。
 - 每条消息占一行，使用换行符结束。
-- `@DEBUG READY` 之前的普通日志、ROM 日志和 bootloader 日志没有业务前缀，调试工具直接忽略。
+- 合法身份 `@DEBUG READY <identity-json>` 之前的普通日志、ROM 日志和 bootloader 日志没有业务前缀，调试工具直接忽略。
 
 具体前缀名称可以在实现前调整，但必须保留明确的帧标识。直接依赖“以 `{` 开头就是业务消息”容易受到日志内容影响，不建议作为正式约定。
 
@@ -126,7 +130,7 @@ DIANJI 中现有的 UART 初始化需要并入统一串口管理，不能继续�
 
 - MQTT 已连接时发送到现有发布主题。
 - 串口调试处于 `ACTIVE` 状态时输出为 `@MSG <payload>`。
-- BLE 保持当前属性特征和消息特征的行为。
+- BLE 保持当前属性特征和消息特征的行为，并通过只读 `0xFF04 Identity` 特征返回与串口 READY 完全相同的身份 JSON；该特征在切换 BLE mode 前即可读取。
 
 各发送条件独立判断，不使用互斥的 `if/else` 路由。因此 MQTT 和串口同时可用时，同一 payload 会同时发送到 MQTT 和串口。通过任一通道下发命令所产生的响应，也遵循相同的多路分发规则。
 
@@ -193,7 +197,7 @@ ROM、bootloader、panic 以及少量绕过普通日志接口的底层输出无�
 - 串口拥有与 MQTT 下行相同的控制权限，包括设备动作和 OTA 命令，应视为高权限物理调试接口。
 - 是否在量产固件启用串口命令，需要由产品和安全策略决定。
 
-除 `@DEBUG READY` 这类会话控制应答外，首版不增加串口专用的业务命令 ACK 或错误 JSON。业务响应继续遵循现有 MQTT 协议，避免串口和 MQTT 形成两套语义。
+除 `@DEBUG READY <identity-json>` 这类会话控制应答外，首版不增加串口专用的业务命令 ACK 或错误 JSON。业务响应继续遵循现有 MQTT 协议，避免串口和 MQTT 形成两套语义。
 
 ## 10. 设计边界
 
@@ -201,6 +205,7 @@ ROM、bootloader、panic 以及少量绕过普通日志接口的底层输出无�
 
 - 单串口上的日志与业务消息复用。
 - 默认关闭并通过 `@DEBUG START` 显式启动调试会话。
+- 每次 `@DEBUG START` 都返回 `device_id + firmware_version`，并在 READY 后发送属性快照。
 - 串口启动可触发一次设备 first ready，支持无 MQTT/BLE 连接时完整启动设备任务。
 - MQTT 与串口同时可用时并行发送同一业务 payload。
 - MQTT/串口共用上下行业务协议。
