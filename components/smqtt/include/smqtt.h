@@ -1,3 +1,6 @@
+#pragma once
+
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <stddef.h>
@@ -21,8 +24,7 @@
 #include "base_device.h"
 
 extern char macStr[18];
+extern volatile bool smqtt_connected;
 
 
-static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data);
 void mqtt_app_start(void);
-static void log_error_if_nonzero(const char *message, int error_code);

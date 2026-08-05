@@ -36,6 +36,7 @@
 #include "cJSON.h"
 #include "esp_mac.h"
 #include "device_ble_service.h"
+#include "device_serial_debug.h"
 #include "ota_update.h"
 
 // self make header
@@ -683,6 +684,12 @@ void app_main(void)
     ESP_ERROR_CHECK(ret);
     ESP_LOGI(TAG, "NVS initialized");
 
+    device_init();
+    ret = device_serial_debug_init();
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "Serial debug initialization failed: %s", esp_err_to_name(ret));
+    }
+
     initialise_wifi();
     ESP_LOGI(TAG, "WiFi initialized");
 
@@ -714,9 +721,6 @@ void app_main(void)
     }
 
     BLUFI_INFO("BLUFI VERSION %04x\n", esp_blufi_get_version());
-
-
-    device_init();
 
     device_ble_service_init();
     s_ble_runtime_ready = true;

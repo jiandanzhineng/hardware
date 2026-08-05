@@ -53,7 +53,7 @@ static void get_tp_data(void);
 static void calculate_press(void);
 static void pressure_sensor_init(void);
 static void read_pressure_data(void);
-static void report_pressure_task(void);
+static void report_pressure_task(void *arg);
 
 void on_set_property(char *property_name, cJSON *property_value, int msg_id)
 {
@@ -70,9 +70,10 @@ void on_mqtt_msg_process(char *topic, cJSON *root)
 {
 }
 
-void on_device_first_ready(void)
+esp_err_t on_device_first_ready(void)
 {
     ESP_LOGI(TAG, "Pressure sensor device ready");
+    return ESP_OK;
 }
 
 static esp_err_t i2c_master_init(void)
@@ -249,14 +250,15 @@ static void read_pressure_data(void)
     device_update_property_float("temperature", current_temperature);
 }
 
-static void report_pressure_task(void)
+static void report_pressure_task(void *arg)
 {
+    (void)arg;
     int32_t remaining_ms;
     int32_t delay_ms;
     while (1) {
         read_pressure_data();
-        if(g_device_mode == MODE_WIFI){
-            cJSON *root = cJSON_CreateObject();
+        cJSON *root = cJSON_CreateObject();
+        if (root) {
             
             // 限制到4位小数
             double pressure_rounded = round(current_pressure * 10000.0) / 10000.0;

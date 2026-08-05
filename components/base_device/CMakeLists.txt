@@ -1,4 +1,4 @@
-set(srcs "base_device.c" )
+set(srcs "base_device.c" "device_serial_debug.c")
 
 if(CONFIG_DEVICE_DIANJI)
     list(APPEND srcs "dianji.c")
@@ -35,7 +35,7 @@ endif()
 
 idf_component_register(SRCS "${srcs}"
                         INCLUDE_DIRS "include"
-                        REQUIRES "mqtt" "esp_wifi" "json" "button" "Battery" "nvs_flash" "app_update" "ota_update")
+                        REQUIRES "mqtt" "esp_wifi" "json" "button" "Battery" "nvs_flash" "app_update" "ota_update" "driver" "vfs")
 
 
 

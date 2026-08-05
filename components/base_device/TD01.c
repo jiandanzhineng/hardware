@@ -92,7 +92,8 @@ void on_device_init(void){
     dimmable_plug_pwm_init();
 }
 
-void on_device_first_ready(void){
+esp_err_t on_device_first_ready(void){
+    return ESP_OK;
 }
 void on_action(cJSON *root){
 

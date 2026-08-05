@@ -300,7 +300,11 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_
                         g_device_mode = MODE_BLE;
                         esp_wifi_stop();
                         ESP_LOGI(TAG, "Mode: BLE");
-                        device_first_ready();
+                        esp_err_t ready_err = device_first_ready();
+                        if (ready_err != ESP_OK) {
+                            ESP_LOGE(TAG, "Device first-ready failed: %s",
+                                     esp_err_to_name(ready_err));
+                        }
                     } else if (v == 0x00) {
                         g_device_mode = MODE_WIFI;
                         esp_wifi_start();
@@ -315,6 +319,7 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_
                 for (int i = 0; i < device_properties_num; i++) {
                     if (prop_value_index[i] >= 0 && handle_table[prop_value_index[i]] == param->write.handle) {
                         device_property_t *p = device_properties[i];
+                        bool property_updated = false;
                         if (p->value_type == PROPERTY_TYPE_INT) {
                             int v = 0;
                             for (int b = 0; b < param->write.len && b < 4; b++) {
@@ -322,14 +327,15 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_
                             }
                             esp_log_buffer_hex(TAG, param->write.value, param->write.len);
                             ESP_LOGI(TAG, "Set %s to %d", p->name, v);
-                            p->value.int_value = v;
-                            prop_value_buf[i][0] = (uint8_t)(v & 0xFF);
-                            prop_value_buf[i][1] = (uint8_t)((v >> 8) & 0xFF);
-                            prop_value_buf[i][2] = (uint8_t)((v >> 16) & 0xFF);
-                            prop_value_buf[i][3] = (uint8_t)((v >> 24) & 0xFF);
-                            prop_value_len[i] = 4;
                             cJSON *val = cJSON_CreateNumber(v);
-                            on_set_property(p->name, val, 0);
+                            if (set_property(p->name, val, 0) == ESP_OK) {
+                                prop_value_buf[i][0] = (uint8_t)(v & 0xFF);
+                                prop_value_buf[i][1] = (uint8_t)((v >> 8) & 0xFF);
+                                prop_value_buf[i][2] = (uint8_t)((v >> 16) & 0xFF);
+                                prop_value_buf[i][3] = (uint8_t)((v >> 24) & 0xFF);
+                                prop_value_len[i] = 4;
+                                property_updated = true;
+                            }
                             cJSON_Delete(val);
                         } else if (p->value_type == PROPERTY_TYPE_FLOAT) {
                             if (param->write.len >= 4) {
@@ -341,25 +347,29 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_
                                 while (exponent < 0) { f /= 10.0f; exponent++; }
                                 esp_log_buffer_hex(TAG, param->write.value, 4);
                                 ESP_LOGI(TAG, "Set %s to %f", p->name, f);
-                                p->value.float_value = f;
-                                memcpy(prop_value_buf[i], &f, 4);
-                                prop_value_len[i] = 4;
                                 cJSON *val = cJSON_CreateNumber(f);
-                                on_set_property(p->name, val, 0);
+                                if (set_property(p->name, val, 0) == ESP_OK) {
+                                    memcpy(prop_value_buf[i], &f, 4);
+                                    prop_value_len[i] = 4;
+                                    property_updated = true;
+                                }
                                 cJSON_Delete(val);
                             }
                         } else {
                             uint16_t l = param->write.len;
-                            if (l > PROPERTY_VALUE_MAX) l = PROPERTY_VALUE_MAX;
-                            memcpy(p->value.string_value, param->write.value, l);
-                            p->value.string_value[l < PROPERTY_VALUE_MAX ? l : PROPERTY_VALUE_MAX - 1] = 0;
-                            memcpy(prop_value_buf[i], p->value.string_value, l);
-                            prop_value_len[i] = l;
-                            cJSON *val = cJSON_CreateString(p->value.string_value);
-                            on_set_property(p->name, val, 0);
+                            if (l >= PROPERTY_VALUE_MAX) l = PROPERTY_VALUE_MAX - 1;
+                            char string_value[PROPERTY_VALUE_MAX];
+                            memcpy(string_value, param->write.value, l);
+                            string_value[l] = 0;
+                            cJSON *val = cJSON_CreateString(string_value);
+                            if (set_property(p->name, val, 0) == ESP_OK) {
+                                memcpy(prop_value_buf[i], string_value, l);
+                                prop_value_len[i] = l;
+                                property_updated = true;
+                            }
                             cJSON_Delete(val);
                         }
-                        if (prop_notify_enabled[i]) {
+                        if (property_updated && prop_notify_enabled[i]) {
                             esp_ble_gatts_send_indicate(s_gatts_if, param->write.conn_id, handle_table[prop_value_index[i]], prop_value_len[i], prop_value_buf[i], false);
                         }
                         break;

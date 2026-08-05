@@ -1,6 +1,10 @@
+#pragma once
+
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "esp_err.h"
 #include "mqtt_client.h"
 
 #include "cJSON.h"
@@ -13,9 +17,6 @@
 #define PROPERTY_TYPE_INT 0
 #define PROPERTY_TYPE_FLOAT 1
 #define PROPERTY_TYPE_STRING 2
-
-#define true 1
-#define false 0
 
 /* 
 define a struct for device property 
@@ -39,6 +40,7 @@ typedef struct device_property {
 
 extern esp_mqtt_client_handle_t smqtt_client;
 extern char publish_topic[32];
+extern volatile bool smqtt_connected;
 
 typedef enum { MODE_WIFI = 0, MODE_BLE = 1 } device_mode_t;
 extern volatile device_mode_t g_device_mode;
@@ -48,6 +50,6 @@ extern volatile int g_device_first_ready_called;
 void on_mqtt_msg_process(char *topic, cJSON *root);
 void on_set_property(char *property_name, cJSON *property_value, int msg_id);
 void on_device_init(void);
-void on_device_first_ready(void);
+esp_err_t on_device_first_ready(void);
 void on_action(cJSON *root);
 void on_device_before_sleep(void);

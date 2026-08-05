@@ -286,13 +286,31 @@ void on_device_init(void) {
     boost_control(0);
 }
 
-void on_device_first_ready(void) {
-    xTaskCreate(report_task, "report_task", 4096, NULL, 5, NULL);
-    xTaskCreate(pressure_task, "pressure_task", 4096, NULL, 5, NULL);
-    xTaskCreate(battery_task, "battery_task", 4096, NULL, 1, NULL);
-    xTaskCreate(pulse_task, "pulse_task", 4096, NULL, 10, NULL);
-    xTaskCreate(boost_pid_task, "boost_pid_task", 4096, NULL, 6, NULL);
-    xTaskCreate(gameplay_task, "gameplay_task", 4096, NULL, 5, NULL);
+esp_err_t on_device_first_ready(void) {
+    TaskHandle_t task_handles[6] = {NULL};
+
+    // Prevent a partial task set from running if a later allocation fails.
+    vTaskSuspendAll();
+    bool created =
+        xTaskCreate(report_task, "report_task", 4096, NULL, 5, &task_handles[0]) == pdPASS &&
+        xTaskCreate(pressure_task, "pressure_task", 4096, NULL, 5, &task_handles[1]) == pdPASS &&
+        xTaskCreate(battery_task, "battery_task", 4096, NULL, 1, &task_handles[2]) == pdPASS &&
+        xTaskCreate(pulse_task, "pulse_task", 4096, NULL, 10, &task_handles[3]) == pdPASS &&
+        xTaskCreate(boost_pid_task, "boost_pid_task", 4096, NULL, 6, &task_handles[4]) == pdPASS &&
+        xTaskCreate(gameplay_task, "gameplay_task", 4096, NULL, 5, &task_handles[5]) == pdPASS;
+    if (!created) {
+        for (size_t i = 0; i < sizeof(task_handles) / sizeof(task_handles[0]); i++) {
+            if (task_handles[i]) {
+                vTaskDelete(task_handles[i]);
+            }
+        }
+    }
+    xTaskResumeAll();
+
+    if (!created) {
+        return ESP_ERR_NO_MEM;
+    }
+    return ESP_OK;
 }
 
 void on_set_property(char *property_name, cJSON *property_value, int msg_id) {

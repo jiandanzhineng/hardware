@@ -64,7 +64,7 @@ static void ota_end(void) {
     portEXIT_CRITICAL(&s_ota_state_mux);
 }
 
-// Helper to report status via MQTT
+// Report status through every active business-message transport.
 static void report_ota_status(const char *status, int progress, const char *msg) {
     cJSON *root = cJSON_CreateObject();
     if (root) {
@@ -73,15 +73,7 @@ static void report_ota_status(const char *status, int progress, const char *msg)
         cJSON_AddNumberToObject(root, "progress", progress);
         if (msg) cJSON_AddStringToObject(root, "msg", msg);
         
-        char *json_str = cJSON_PrintUnformatted(root);
-        if (json_str) {
-            ESP_LOGI(TAG, "OTA Status Report: %s", json_str);
-            // TODO: Integrate with actual MQTT publish if available
-            // extern void smqtt_publish_data(const char *data); 
-             esp_mqtt_client_publish(smqtt_client, publish_topic, json_str, 0, 1, 0);
-            free(json_str);
-        }
-        cJSON_Delete(root);
+        device_publish_message(root);
     }
 }
 

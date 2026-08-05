@@ -72,9 +72,10 @@ void on_device_init()
 }
 
 // 创建任务
-void on_device_first_ready()
+esp_err_t on_device_first_ready(void)
 {
     ESP_LOGI(TAG, "PJ01 device ready");
+    return ESP_OK;
 }
 
 void on_set_property(char *property_name, cJSON *property_value, int msg_id)

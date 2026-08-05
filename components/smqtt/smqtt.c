@@ -21,10 +21,12 @@ static esp_event_handler_instance_t ip_event_inst = NULL;
 // Periodic start task state
 static TaskHandle_t smqtt_start_task_handle = NULL;
 static volatile bool smqtt_connecting = false;
-static volatile bool smqtt_connected = false;
+volatile bool smqtt_connected = false;
 
 // Forward declaration for periodic task
 static void smqtt_start_client_on_current_broker_task(void *arg);
+static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
+                               int32_t event_id, void *event_data);
 
 __attribute__((weak)) void app_release_ble_resources(const char *reason)
 {
@@ -92,8 +94,12 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         /*subscibe topic: /drecv/{mac} */
         msg_id = esp_mqtt_client_subscribe(client, recv_topic, 0);
         ESP_LOGI(TAG, "sent subscribe successful, topic is %s, msg_id=%d", recv_topic, msg_id);
-        device_first_ready();
-        app_release_ble_resources("mqtt connected");
+        esp_err_t ready_err = device_first_ready();
+        if (ready_err == ESP_OK) {
+            app_release_ble_resources("mqtt connected");
+        } else {
+            ESP_LOGE(TAG, "Device first-ready failed: %s", esp_err_to_name(ready_err));
+        }
         break;
     case MQTT_EVENT_DISCONNECTED:
         ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");

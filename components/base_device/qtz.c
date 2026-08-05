@@ -177,7 +177,7 @@ static uint16_t vl6180x_read_range_single_millimeters(void);
 static void vl6180x_set_timeout(uint32_t timeout);
 static bool vl6180x_timeout_occurred(void);
 
-static void check_distance_task(void);
+static void check_distance_task(void *arg);
 
 // 按钮回调函数声明
 static void button0_press_cb(void *arg, void *usr_data);
@@ -214,7 +214,7 @@ void on_mqtt_msg_process(char *topic, cJSON *root)
 {
 }
 
-void on_device_first_ready(void)
+esp_err_t on_device_first_ready(void)
 {
     ESP_LOGI(TAG, "device_first_ready");
 
@@ -228,7 +228,10 @@ void on_device_first_ready(void)
     ESP_LOGI(TAG, "设置缩放为3");
     vl6180x_set_timeout(500);
     ESP_LOGI(TAG, "设置超时为500ms");
-    xTaskCreate(check_distance_task, "check_distance_task", 1024 * 2, NULL, 10, NULL);
+    if (xTaskCreate(check_distance_task, "check_distance_task", 1024 * 2, NULL, 10, NULL) != pdPASS) {
+        return ESP_ERR_NO_MEM;
+    }
+    return ESP_OK;
 }
 
 // I2C写入16位寄存器
@@ -516,8 +519,9 @@ static bool vl6180x_timeout_occurred(void)
     return tmp;
 }
 
-static void check_distance_task(void)
+static void check_distance_task(void *arg)
 {
+    (void)arg;
     const TickType_t slice = pdMS_TO_TICKS(100);
     while (1)
     {
@@ -668,28 +672,25 @@ void nvs0_read(void)
     esp_err_t err = nvs_open("storage", NVS_READWRITE, &my_handle);
     if (err != ESP_OK)
     {
-        printf("Error (%s) opening NVS handle!\n", esp_err_to_name(err));
+        ESP_LOGE(TAG, "Error opening NVS handle: %s", esp_err_to_name(err));
     }
     else
     {
-        printf("Done\n");
-        // Read
-        printf("Reading restart counter from NVS ... ");
+        ESP_LOGI(TAG, "Reading threshold values from NVS");
         // err = nvs_get_i32(my_handle, "inout_diveder", &inout_divider);
         err = nvs_get_i32(my_handle, "low_band", &low_band);
         err = nvs_get_i32(my_handle, "high_band", &high_band);
         switch (err)
         {
         case ESP_OK:
-            printf("Done\n");
-            printf("get low_band = %" PRIu32 "\n", low_band);
-            printf("get high_band = %" PRIu32 "\n", high_band);
+            ESP_LOGI(TAG, "NVS thresholds: low_band=%" PRIu32 ", high_band=%" PRIu32,
+                     low_band, high_band);
             break;
         case ESP_ERR_NVS_NOT_FOUND:
-            printf("The value is not initialized yet!\n");
+            ESP_LOGW(TAG, "NVS threshold values are not initialized");
             break;
         default:
-            printf("Error (%s) reading!\n", esp_err_to_name(err));
+            ESP_LOGE(TAG, "Error reading NVS thresholds: %s", esp_err_to_name(err));
         }
         nvs_close(my_handle);
     }
@@ -701,22 +702,23 @@ void nvs0_set(void)
     esp_err_t err = nvs_open("storage", NVS_READWRITE, &my_handle);
     if (err != ESP_OK)
     {
-        printf("Error (%s) opening NVS handle!\n", esp_err_to_name(err));
+        ESP_LOGE(TAG, "Error opening NVS handle: %s", esp_err_to_name(err));
     }
     else
     {
-        printf("Done\n");
-        // Read
-        printf("Write to NVS ... ");
+        ESP_LOGI(TAG, "Writing threshold values to NVS");
         // err = nvs_set_i32(my_handle, "inout_diveder", inout_divider);
         err = nvs_set_i32(my_handle, "low_band", low_band);
         err = nvs_set_i32(my_handle, "high_band", high_band);
-        printf((err != ESP_OK) ? "Failed!\n" : "Done\n");
-        printf("Committing updates in NVS ... ");
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to write NVS thresholds: %s", esp_err_to_name(err));
+        }
         err = nvs_commit(my_handle);
-        printf((err != ESP_OK) ? "Failed!\n" : "Done\n");
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to commit NVS thresholds: %s", esp_err_to_name(err));
+        }
+        nvs_close(my_handle);
     }
-    nvs_close(my_handle);
 }
 
 // 按钮0按下回调函数

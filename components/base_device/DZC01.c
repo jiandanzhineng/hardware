@@ -758,10 +758,11 @@ void on_device_init(void) {
     xTaskCreate(report_task, "dzc01_report_task", 4096, NULL, 8, NULL);
 }
 
-void on_device_first_ready(void) {
+esp_err_t on_device_first_ready(void) {
     device_update_property_string("line1_text", "Connected");
     get_property("line1_text", 0);
     net_ready = true;
+    return ESP_OK;
 }
 
 void on_mqtt_msg_process(char *topic, cJSON *root) {

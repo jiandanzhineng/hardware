@@ -27,7 +27,6 @@
 #include "lwip/dns.h"
 #include "lwip/netdb.h"
 
-#include "driver/uart.h"
 #include "driver/gpio.h"
 #include "driver/ledc.h"
 #include "driver/adc.h"
@@ -74,9 +73,6 @@ DEVICE_PROPERTIES_NUM_DEFINE(device_properties);
 
 // 升压ADC检测引脚
 #define BOOST_ADC 4
-
-// 串口缓冲区大小
-#define UART_BUF_SIZE (512)
 
 // 电池ADC检测使能引脚
 #define BAT_ADC_EN 18
@@ -140,7 +136,6 @@ int32_t remain_time = 0;
 
 
 void init_gpio();
-void init_uart();
 void init_pwm();
 void init_adc();
 void init_pid();
@@ -150,7 +145,7 @@ void get_bat_adc(void *arg);
 void pwm_output(void *arg);
 void output(void *arg);
 void init_property();
-void stop_shock_task();
+void stop_shock_task(void *arg);
 void nvs_dianji_init(void);
 void nvs_dianji_read(void);
 void nvs_dianji_set(void);
@@ -160,7 +155,6 @@ void nvs_dianji_set(void);
 void on_device_init()
 {
     init_gpio();
-    init_uart();
     init_pwm();
     init_adc();
     init_pid();
@@ -171,13 +165,31 @@ void on_device_init()
 }
 
 // 创建任务
-void on_device_first_ready()
+esp_err_t on_device_first_ready(void)
 {
-    xTaskCreate(printf_log, "printf_log", 4096, NULL, 2, NULL);
-    xTaskCreate(get_bat_adc, "get_bat_adc", 4096, NULL, 2, NULL);
-    xTaskCreate(pwm_output, "pwm_output", 4096, NULL, 2, NULL);
-    xTaskCreate(output, "output", 4096, NULL, 2, NULL);
-    xTaskCreate(stop_shock_task, "stop_shock_task", 4096, NULL, 2, NULL);
+    TaskHandle_t task_handles[5] = {NULL};
+
+    // Prevent a partial task set from running if a later allocation fails.
+    vTaskSuspendAll();
+    bool created =
+        xTaskCreate(printf_log, "printf_log", 4096, NULL, 2, &task_handles[0]) == pdPASS &&
+        xTaskCreate(get_bat_adc, "get_bat_adc", 4096, NULL, 2, &task_handles[1]) == pdPASS &&
+        xTaskCreate(pwm_output, "pwm_output", 4096, NULL, 2, &task_handles[2]) == pdPASS &&
+        xTaskCreate(output, "output", 4096, NULL, 2, &task_handles[3]) == pdPASS &&
+        xTaskCreate(stop_shock_task, "stop_shock_task", 4096, NULL, 2, &task_handles[4]) == pdPASS;
+    if (!created) {
+        for (size_t i = 0; i < sizeof(task_handles) / sizeof(task_handles[0]); i++) {
+            if (task_handles[i]) {
+                vTaskDelete(task_handles[i]);
+            }
+        }
+    }
+    xTaskResumeAll();
+
+    if (!created) {
+        return ESP_ERR_NO_MEM;
+    }
+    return ESP_OK;
 }
 
 void on_set_property(char *property_name, cJSON *property_value, int msg_id)
@@ -192,11 +204,22 @@ void on_set_property(char *property_name, cJSON *property_value, int msg_id)
 
 void on_action(cJSON *root)
 {
-    char *method = cJSON_GetObjectItem(root, "method")->valuestring;
-    if (strcmp(method, "dian") == 0)
+    cJSON *method_item = cJSON_GetObjectItem(root, "method");
+    if (!cJSON_IsString(method_item)) {
+        return;
+    }
+
+    if (strcmp(method_item->valuestring, "dian") == 0)
     {
-        int time = cJSON_GetObjectItem(root, "time")->valueint;
-        int voltage = cJSON_GetObjectItem(root, "voltage")->valueint;
+        cJSON *time_item = cJSON_GetObjectItem(root, "time");
+        cJSON *voltage_item = cJSON_GetObjectItem(root, "voltage");
+        if (!cJSON_IsNumber(time_item) || !cJSON_IsNumber(voltage_item)) {
+            ESP_LOGW(TAG, "Invalid dian action");
+            return;
+        }
+
+        int time = time_item->valueint;
+        int voltage = voltage_item->valueint;
         voltage_property.value.int_value = voltage;
         shock_property.value.int_value = 1;
         ESP_LOGI(TAG, "dian time: %d, voltage: %d", time, voltage);
@@ -208,8 +231,9 @@ void on_action(cJSON *root)
     }
 }
 
-void stop_shock_task()
+void stop_shock_task(void *arg)
 {
+    (void)arg;
     while (1)
     {
         vTaskDelay(100 / portTICK_PERIOD_MS);
@@ -304,7 +328,7 @@ void on_mqtt_msg_process(char *topic, cJSON *root)
         cJSON_free(json_str);
     } else {
         // 处理转换失败的情况
-        printf("Error: cJSON_PrintUnformatted failed\n");
+        ESP_LOGE(TAG, "cJSON_PrintUnformatted failed");
     }
 }
 
@@ -429,22 +453,6 @@ void init_gpio()
     gpio_set_level(O1, 0);
     gpio_set_level(O2, 0);
     gpio_set_level(BAT_ADC_EN, 1);
-}
-
-
-// 串口初始化
-void init_uart()
-{
-    uart_config_t uart_config = {
-        .baud_rate = 115200,
-        .data_bits = UART_DATA_8_BITS,
-        .parity = UART_PARITY_DISABLE,
-        .stop_bits = UART_STOP_BITS_1,
-        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
-        .source_clk = UART_SCLK_APB,
-    };
-    uart_driver_install(UART_NUM_0, UART_BUF_SIZE, UART_BUF_SIZE, 0, NULL, 0);
-    uart_param_config(UART_NUM_0, &uart_config);
 }
 
 
@@ -669,10 +677,8 @@ void printf_log(void *arg)
     while (1)
     {
         now_v = adc1_get_raw(BOOST_ADC) * BOOST_ADC_K;
-        printf("now_v is %f\r\n",now_v);
-        printf("target_v is %f\r\n",target_v);
-        printf("pwm_f is %d\r\n",(int)pwm_f);
-        printf("pid is %f %f %f\r\n",pid.Kp,pid.Ki,pid.Kd);
+        ESP_LOGI(TAG, "now_v=%.3f target_v=%.3f pwm_f=%d pid=%.3f %.3f %.3f",
+                 now_v, target_v, (int)pwm_f, pid.Kp, pid.Ki, pid.Kd);
         vTaskDelay(pdMS_TO_TICKS(3000));
     }
 }

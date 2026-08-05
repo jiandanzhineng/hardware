@@ -379,9 +379,10 @@ void on_device_init(void){
     xTaskCreate(emergency_mode_task, "emergency_mode_task", 2048, NULL, 4, NULL);
 }
 
-void on_device_first_ready(void){
+esp_err_t on_device_first_ready(void){
     // Initial servo position
     // set_servo_angle(0);
+    return ESP_OK;
 }
 
 void on_action(cJSON *root){

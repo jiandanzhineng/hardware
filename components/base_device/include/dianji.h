@@ -9,8 +9,6 @@
 extern int device_properties_num;
 
 static void button_single_click_cb(void *arg,void *usr_data);
-static void report_all_properties(void);
-static void heartbeat_task(void);
 static void dimmable_plug_pwm_init(void);
 static void control_ledc(ledc_channel_t channel, uint32_t duty);
 
