@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "base_device.h"
+#include "device_identity.h"
 #include "driver/uart.h"
 #include "esp_log.h"
 #include "esp_vfs_dev.h"
@@ -118,6 +119,25 @@ static esp_err_t serial_debug_send_control_sync(const char *line)
     return err;
 }
 
+static esp_err_t serial_debug_send_ready(bool synchronous)
+{
+    char identity[DEVICE_IDENTITY_JSON_MAX_LEN];
+    esp_err_t err = device_identity_write_json(identity, sizeof(identity), NULL);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    char frame[DEVICE_IDENTITY_JSON_MAX_LEN + sizeof("@DEBUG READY \r\n")];
+    int frame_len = snprintf(frame, sizeof(frame), "@DEBUG READY %s\r\n", identity);
+    if (frame_len < 0 || (size_t)frame_len >= sizeof(frame)) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    return synchronous
+               ? serial_debug_send_control_sync(frame)
+               : serial_debug_queue_control(frame);
+}
+
 esp_err_t device_serial_debug_send_payload(const char *payload, size_t len)
 {
     static const char prefix[] = "@MSG ";
@@ -179,8 +199,12 @@ static void serial_debug_start_session(void)
 {
     serial_debug_state_t state = serial_debug_get_state();
     if (state == SERIAL_DEBUG_ACTIVE) {
-        serial_debug_queue_control("@DEBUG READY\r\n");
-        device_report_all_properties();
+        esp_err_t err = serial_debug_send_ready(false);
+        if (err == ESP_OK) {
+            device_report_all_properties();
+        } else {
+            ESP_LOGE(TAG, "Failed to resend serial identity: %s", esp_err_to_name(err));
+        }
         return;
     }
     if (state != SERIAL_DEBUG_CLOSED) {
@@ -200,7 +224,7 @@ static void serial_debug_start_session(void)
         ESP_LOGE(TAG, "Failed to flush serial input: %s", esp_err_to_name(err));
         return;
     }
-    err = serial_debug_send_control_sync("@DEBUG READY\r\n");
+    err = serial_debug_send_ready(true);
     if (err != ESP_OK) {
         serial_debug_set_state(SERIAL_DEBUG_CLOSED);
         ESP_LOGE(TAG, "Failed to start serial debug session: %s", esp_err_to_name(err));

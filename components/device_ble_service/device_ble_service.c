@@ -9,6 +9,7 @@
 #include "device_ble_service.h"
 #include "device_common.h"
 #include "base_device.h"
+#include "device_identity.h"
 #include "esp_wifi.h"
 
 #define TAG "DEVICE_BLE"
@@ -17,6 +18,7 @@
 #define CHAR_UUID           0xFF01
 #define MODE_CHAR_UUID      0xFF02
 #define COMMAND_CHAR_UUID   0xFF03
+#define IDENTITY_CHAR_UUID  0xFF04
 #define APP_ID              1
 #define BLE_MESSAGE_MAX_LEN 256
 
@@ -42,11 +44,14 @@ static uint8_t s_message_value[BLE_MESSAGE_MAX_LEN] = {0};
 static uint16_t s_message_value_len = 0;
 static uint8_t s_message_cccd[2] = {0};
 static uint8_t s_message_notify_enabled = 0;
+static uint8_t s_identity_value[DEVICE_IDENTITY_JSON_MAX_LEN] = {0};
+static uint16_t s_identity_value_len = 0;
 
 static const uint16_t primary_service_uuid = ESP_GATT_UUID_PRI_SERVICE;
 static const uint16_t character_declaration_uuid = ESP_GATT_UUID_CHAR_DECLARE;
 static const uint16_t cccd_uuid = ESP_GATT_UUID_CHAR_CLIENT_CONFIG;
 static const uint8_t char_prop_read_notify = ESP_GATT_CHAR_PROP_BIT_READ | ESP_GATT_CHAR_PROP_BIT_NOTIFY;
+static const uint8_t char_prop_read = ESP_GATT_CHAR_PROP_BIT_READ;
 static const uint8_t char_prop_write = ESP_GATT_CHAR_PROP_BIT_WRITE | ESP_GATT_CHAR_PROP_BIT_WRITE_NR;
 static const uint16_t service_uuid = SERVICE_UUID;
 static const uint16_t char_uuid = CHAR_UUID;
@@ -54,6 +59,7 @@ static const uint16_t mode_char_uuid = MODE_CHAR_UUID;
 static uint8_t mode_value[1] = {0x00};
 static const uint16_t command_char_uuid = COMMAND_CHAR_UUID;
 static uint8_t command_value[BLE_MESSAGE_MAX_LEN] = {0};
+static const uint16_t identity_char_uuid = IDENTITY_CHAR_UUID;
 
 enum {
     IDX_SERVICE = 0,
@@ -64,6 +70,8 @@ enum {
     IDX_MODE_VAL,
     IDX_COMMAND_CHAR,
     IDX_COMMAND_VAL,
+    IDX_IDENTITY_CHAR,
+    IDX_IDENTITY_VAL,
 };
 
 static void build_gatt_table(void) {
@@ -175,6 +183,24 @@ static void build_gatt_table(void) {
     gatt_db[idx].att_desc.max_length = BLE_MESSAGE_MAX_LEN;
     gatt_db[idx].att_desc.length = 0;
     gatt_db[idx].att_desc.value = command_value;
+    idx++;
+
+    gatt_db[idx].attr_control.auto_rsp = ESP_GATT_AUTO_RSP;
+    gatt_db[idx].att_desc.uuid_length = ESP_UUID_LEN_16;
+    gatt_db[idx].att_desc.uuid_p = (uint8_t *)&character_declaration_uuid;
+    gatt_db[idx].att_desc.perm = ESP_GATT_PERM_READ;
+    gatt_db[idx].att_desc.max_length = sizeof(uint8_t);
+    gatt_db[idx].att_desc.length = sizeof(char_prop_read);
+    gatt_db[idx].att_desc.value = (uint8_t *)&char_prop_read;
+    idx++;
+
+    gatt_db[idx].attr_control.auto_rsp = ESP_GATT_AUTO_RSP;
+    gatt_db[idx].att_desc.uuid_length = ESP_UUID_LEN_16;
+    gatt_db[idx].att_desc.uuid_p = (uint8_t *)&identity_char_uuid;
+    gatt_db[idx].att_desc.perm = ESP_GATT_PERM_READ;
+    gatt_db[idx].att_desc.max_length = sizeof(s_identity_value);
+    gatt_db[idx].att_desc.length = s_identity_value_len;
+    gatt_db[idx].att_desc.value = s_identity_value;
     idx++;
 
     for (int i = 0; i < device_properties_num; i++) {
@@ -393,6 +419,10 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_
 }
 
 void device_ble_service_init(void) {
+    size_t identity_len = 0;
+    ESP_ERROR_CHECK(device_identity_write_json(
+        (char *)s_identity_value, sizeof(s_identity_value), &identity_len));
+    s_identity_value_len = (uint16_t)identity_len;
     s_ble_service_started = true;
     s_message_value_len = 0;
     s_message_cccd[0] = 0;
@@ -443,6 +473,7 @@ void device_ble_service_deinit(void) {
     s_message_cccd[0] = 0;
     s_message_cccd[1] = 0;
     s_message_notify_enabled = 0;
+    s_identity_value_len = 0;
 }
 
 void device_ble_send_message(const char *message) {

@@ -468,8 +468,9 @@ static void initialise_wifi(void)
     ESP_ERROR_CHECK(esp_wifi_start());
 
     // After boot, if still not connected within 10s, try default Wi-Fi
-    extern void default_wifi_attempt_task(void *arg);
-    xTaskCreate(default_wifi_attempt_task, "default_wifi_attempt", 2048, NULL, 5, NULL);
+    if (xTaskCreate(default_wifi_attempt_task, "default_wifi_attempt", 4096, NULL, 5, NULL) != pdPASS) {
+        ESP_LOGE(TAG, "Failed to create default WiFi attempt task");
+    }
 }
 
 static esp_blufi_callbacks_t example_callbacks = {

@@ -84,9 +84,9 @@
 #endif
 
 // device_ble_service 为每个属性建 4 个 attribute（characteristic 声明、value、
-// CCCD、User Description），加上服务本身的 8 个固定 attribute。CCCD 只有
+// CCCD、User Description），加上服务本身的 10 个固定 attribute。CCCD 只有
 // readable 属性才有，所以这是最坏情况的上界。
-#define DEVICE_BLE_BASE_ATTR_COUNT   8
+#define DEVICE_BLE_BASE_ATTR_COUNT   10
 #define DEVICE_BLE_ATTR_PER_PROPERTY 4
 #define DEVICE_BLE_ATTR_COUNT_MAX(n) \
     (DEVICE_BLE_BASE_ATTR_COUNT + (n) * DEVICE_BLE_ATTR_PER_PROPERTY)
