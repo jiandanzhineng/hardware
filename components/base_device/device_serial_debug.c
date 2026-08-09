@@ -138,6 +138,26 @@ static esp_err_t serial_debug_send_ready(bool synchronous)
                : serial_debug_queue_control(frame);
 }
 
+// 只读身份查询:@DEBUG IDENTIFY → @DEBUG IDENT {json}。
+// 不开启会话、不触发 device_first_ready,因此传感器等部件初始化失败的
+// 设备也能被识别(有线烧录前的型号识别走这条路)。
+static esp_err_t serial_debug_send_ident(void)
+{
+    char identity[DEVICE_IDENTITY_JSON_MAX_LEN];
+    esp_err_t err = device_identity_write_json(identity, sizeof(identity), NULL);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    char frame[DEVICE_IDENTITY_JSON_MAX_LEN + sizeof("@DEBUG IDENT \r\n")];
+    int frame_len = snprintf(frame, sizeof(frame), "@DEBUG IDENT %s\r\n", identity);
+    if (frame_len < 0 || (size_t)frame_len >= sizeof(frame)) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    return serial_debug_send_control_sync(frame);
+}
+
 esp_err_t device_serial_debug_send_payload(const char *payload, size_t len)
 {
     static const char prefix[] = "@MSG ";
@@ -237,6 +257,7 @@ static void serial_debug_start_session(void)
 static bool serial_debug_process_line(char *line)
 {
     static const char start_command[] = "@DEBUG START";
+    static const char identify_command[] = "@DEBUG IDENTIFY";
     static const char command_prefix[] = "@CMD ";
 
     size_t len = strlen(line);
@@ -251,6 +272,14 @@ static bool serial_debug_process_line(char *line)
         bool starting = serial_debug_get_state() == SERIAL_DEBUG_CLOSED;
         serial_debug_start_session();
         return starting;
+    }
+
+    if (strcmp(line, identify_command) == 0) {
+        esp_err_t err = serial_debug_send_ident();
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to send ident frame: %s", esp_err_to_name(err));
+        }
+        return false;
     }
 
     if (!device_serial_debug_is_active()) {

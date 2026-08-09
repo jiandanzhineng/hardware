@@ -6,5 +6,5 @@
 
 #define DEVICE_IDENTITY_JSON_MAX_LEN 256
 
-// Writes a compact JSON object containing device_id and firmware_version.
+// Writes a compact JSON object containing device_id, firmware_version and device_type.
 esp_err_t device_identity_write_json(char *buffer, size_t buffer_size, size_t *written);

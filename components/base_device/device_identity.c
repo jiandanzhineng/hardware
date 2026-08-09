@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "base_device.h"
 #include "cJSON.h"
 #include "esp_app_desc.h"
 #include "esp_mac.h"
@@ -48,7 +49,8 @@ esp_err_t device_identity_write_json(char *buffer, size_t buffer_size, size_t *w
     cJSON *device_id_item = cJSON_AddStringToObject(root, "device_id", device_id);
     cJSON *firmware_version_item =
         cJSON_AddStringToObject(root, "firmware_version", firmware_version);
-    if (!device_id_item || !firmware_version_item) {
+    cJSON *device_type_item = cJSON_AddStringToObject(root, "device_type", DEVICE_TYPE_NAME);
+    if (!device_id_item || !firmware_version_item || !device_type_item) {
         cJSON_Delete(root);
         return ESP_ERR_NO_MEM;
     }
