@@ -66,10 +66,10 @@ MQTT 下行 -----+
 4. 通过统一串口输出出口返回一条带设备身份的完整就绪标记：
 
 ```text
-@DEBUG READY {"device_id":"aabbccddeeff","firmware_version":"v1.1.38"}
+@DEBUG READY {"device_id":"aabbccddeeff","firmware_version":"v1.1.38","device_type":"QTZ"}
 ```
 
-`device_id` 是 `esp_efuse_mac_get_default()` 返回的 6 字节基础 MAC，编码为 12 位小写、无分隔符字符串，与 MQTT topic 使用的设备 ID 相同。`firmware_version` 原样读取 `esp_ota_get_app_description()->version`，包括 `PROJECT_VER` 中的前导 `v`。身份载荷由公共 `device_identity` 模块使用 cJSON 生成，串口与 BLE 不分别拼接 JSON。
+`device_id` 是 `esp_efuse_mac_get_default()` 返回的 6 字节基础 MAC，编码为 12 位小写、无分隔符字符串，与 MQTT topic 使用的设备 ID 相同。`firmware_version` 原样读取 `esp_ota_get_app_description()->version`，包括 `PROJECT_VER` 中的前导 `v`。`device_type` 是编译期由 Kconfig 设备选择决定的 `DEVICE_TYPE_NAME` 常量。身份载荷由公共 `device_identity` 模块使用 cJSON 生成，串口与 BLE 不分别拼接 JSON；握手不包含协议版本。
 
 主机只有收到字段完整且格式合法的新版 `@DEBUG READY` 后，才开始发送 `@CMD` 并解析 `@MSG`。仅返回 `@DEBUG READY` 的旧固件不允许以 COM 口生成临时身份，主机必须拒绝并释放该端口。启动命令是串口控制命令，不属于 MQTT 业务协议。
 
@@ -80,6 +80,22 @@ first ready 初始化期间不向主机输出 `@MSG`；进入 `ACTIVE` 后主动
 设备在 `ACTIVE` 状态再次收到 `@DEBUG START` 时，也必须重新返回完整的身份 READY，随后重新发送当前属性快照。这样主机可重复握手，不需要为了确认端口身份而复位设备。
 
 设备复位后调试状态自动关闭。是否增加主动停止命令，可在实现阶段按调试工具需要决定。
+
+### 4.1.1 只读身份查询
+
+有线烧录等场景只需要确认"这台设备是什么"，不应为此开启调试会话（first ready 可能因传感器等部件故障而失败，且识别不应改变设备状态）。为此定义只读查询命令：
+
+```text
+@DEBUG IDENTIFY
+```
+
+设备在任何状态（`CLOSED`/`ACTIVE`）收到完整查询命令后，同步返回一条身份帧，不改变调试状态、不触发 first ready：
+
+```text
+@DEBUG IDENT {"device_id":"aabbccddeeff","firmware_version":"v1.1.38","device_type":"QTZ"}
+```
+
+载荷与 `@DEBUG READY` 的身份 JSON 完全一致，同样由 `device_identity` 模块生成。不识别该命令的旧固件静默忽略，主机按超时回退到启动日志解析。
 
 ### 4.2 行级复用
 

@@ -6,6 +6,9 @@ managed_components
 
 sdkconfig
 sdkconfig.old
+sdkconfig.bak*
+
+*.log
 
 .trae/documents/*.md
 *.bin
