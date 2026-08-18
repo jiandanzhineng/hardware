@@ -281,45 +281,26 @@ class DeviceGUIController:
                 self.property_widgets[device_id][f"{prop_name}_scale"] = scale
                 hidden_props.add(prop_name)
                 row += 1
+        game_props = []
         for prop_name, prop_info in device.properties.items():
-            # 跳过隐藏属性
-            if prop_name in hidden_props:
+            if prop_name in hidden_props or not prop_info["readable"]:
                 continue
-            if prop_info["readable"]:
-                # 属性标签
-                ttk.Label(props_frame, text=f"{prop_name}:").grid(row=row, column=0, sticky="w", padx=3, pady=1)
-                
-                # 属性值显示
-                value_var = tk.StringVar(value=str(prop_info["value"]))
-                value_label = ttk.Label(props_frame, textvariable=value_var, relief="sunken", width=12)
-                value_label.grid(row=row, column=1, padx=3, pady=1)
-                
-                self.property_widgets[device_id][f"{prop_name}_var"] = value_var
-                
-                # 如果属性可写，添加控制组件
-                if prop_info["writeable"]:
-                    if prop_name in ["power", "voltage", "delay", "low_band", "high_band", "report_delay_ms", "sleep_time", "report_interval", "pressure","distance","display_mode","display_contrast"]:
-                        # 数值输入
-                        entry = ttk.Entry(props_frame, width=8)
-                        entry.grid(row=row, column=2, padx=3, pady=1)
-                        
-                        set_btn = ttk.Button(props_frame, text="设置", 
-                                           command=lambda p=prop_name, e=entry: self.set_property(device_id, p, e.get()))
-                        set_btn.grid(row=row, column=3, padx=3, pady=1)
-                        
-                    elif prop_name in ["shock", "open", "display_on", "safe"]:
-                        # 开关按钮
-                        toggle_btn = ttk.Button(props_frame, text="切换", 
-                                              command=lambda p=prop_name: self.toggle_property(device_id, p))
-                        toggle_btn.grid(row=row, column=2, padx=3, pady=1)
-                    else:
-                        entry = ttk.Entry(props_frame, width=16)
-                        entry.grid(row=row, column=2, padx=3, pady=1)
-                        set_btn = ttk.Button(props_frame, text="设置", 
-                                           command=lambda p=prop_name, e=entry: self.set_property(device_id, p, e.get()))
-                        set_btn.grid(row=row, column=3, padx=3, pady=1)
-                
-                row += 1
+            if prop_name.startswith("game_"):
+                game_props.append((prop_name, prop_info))
+                continue
+            row = self._add_property_row(device_id, props_frame, prop_name, prop_info, row)
+        if game_props:
+            toggle_btn = ttk.Button(props_frame, text="▶ 玩法参数")
+            toggle_btn.grid(row=row, column=0, columnspan=4, sticky="w", padx=3, pady=2)
+            row += 1
+            game_frame = ttk.Frame(props_frame)
+            grow = 0
+            for prop_name, prop_info in game_props:
+                grow = self._add_property_row(device_id, game_frame, prop_name, prop_info, grow)
+            self.property_widgets[device_id]["game_fold"] = {
+                "expanded": False, "button": toggle_btn, "frame": game_frame, "row": row,
+            }
+            toggle_btn.config(command=lambda did=device_id: self._toggle_game_props(did))
         
         # 设备特定的动作按钮
         actions_frame = ttk.LabelFrame(device_frame, text="设备动作", padding=3)
@@ -352,7 +333,47 @@ class DeviceGUIController:
             ttk.Button(actions_frame, text="模拟按键点击", 
                       command=lambda: self.send_action(device_id, "key_clicked")).pack(side=tk.LEFT, padx=3)
 
-    
+    def _add_property_row(self, device_id, parent, prop_name, prop_info, row):
+        ttk.Label(parent, text=f"{prop_name}:").grid(row=row, column=0, sticky="w", padx=3, pady=1)
+        value_var = tk.StringVar(value=str(prop_info["value"]))
+        ttk.Label(parent, textvariable=value_var, relief="sunken", width=12).grid(
+            row=row, column=1, padx=3, pady=1)
+        self.property_widgets[device_id][f"{prop_name}_var"] = value_var
+        if not prop_info["writeable"]:
+            return row + 1
+        number_props = ["power", "voltage", "delay", "low_band", "high_band",
+                        "report_delay_ms", "sleep_time", "report_interval",
+                        "pressure", "distance", "display_mode", "display_contrast"]
+        if prop_name in number_props:
+            entry = ttk.Entry(parent, width=8)
+            entry.grid(row=row, column=2, padx=3, pady=1)
+            ttk.Button(parent, text="设置",
+                       command=lambda p=prop_name, e=entry: self.set_property(device_id, p, e.get())).grid(
+                row=row, column=3, padx=3, pady=1)
+        elif prop_name in ["shock", "open", "display_on", "safe"]:
+            ttk.Button(parent, text="切换",
+                       command=lambda p=prop_name: self.toggle_property(device_id, p)).grid(
+                row=row, column=2, padx=3, pady=1)
+        else:
+            entry = ttk.Entry(parent, width=16)
+            entry.grid(row=row, column=2, padx=3, pady=1)
+            ttk.Button(parent, text="设置",
+                       command=lambda p=prop_name, e=entry: self.set_property(device_id, p, e.get())).grid(
+                row=row, column=3, padx=3, pady=1)
+        return row + 1
+
+    def _toggle_game_props(self, device_id: str):
+        fold = self.property_widgets.get(device_id, {}).get("game_fold")
+        if not fold:
+            return
+        fold["expanded"] = not fold["expanded"]
+        if fold["expanded"]:
+            fold["frame"].grid(row=fold["row"], column=0, columnspan=4, sticky="ew", padx=3)
+            fold["button"].config(text="▼ 玩法参数")
+        else:
+            fold["frame"].grid_remove()
+            fold["button"].config(text="▶ 玩法参数")
+
     def start_device(self, device_id: str):
         """启动设备"""
         if device_id in self.devices:
