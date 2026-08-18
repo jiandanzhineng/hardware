@@ -823,48 +823,97 @@ class CUNZHI01Device(BaseVirtualDevice):
     def __init__(self, device_id: str, **kwargs):
         super().__init__(device_id, "CUNZHI01", **kwargs)
         
-        # CUNZHI01特有属性
+        # 属性对齐 CUNZHI01.c / 设备定义
         self.properties.update({
-            "power": {"value": 0, "readable": True, "writeable": True},        # 0-255 (电机)
-            "voltage": {"value": 0, "readable": True, "writeable": True},      # 0-100 (电脉冲)
-            "pressure": {"value": 0, "readable": True, "writeable": False},    # 压力1 (欧姆)
-            "pressure1": {"value": 0, "readable": True, "writeable": False},   # 压力2 (欧姆)
-            "report_delay_ms": {"value": 1000, "readable": True, "writeable": True}
+            "power": {"value": 0, "readable": True, "writeable": True},
+            "voltage": {"value": 0, "readable": True, "writeable": True},
+            "shock": {"value": 0, "readable": True, "writeable": True},
+            "delay": {"value": 30, "readable": True, "writeable": True},
+            "safe": {"value": 1, "readable": True, "writeable": True},
+            "pressure": {"value": 0.0, "readable": True, "writeable": False},
+            "pressure1": {"value": 0.0, "readable": True, "writeable": False},
+            "report_delay_ms": {"value": 5000, "readable": True, "writeable": True},
+            "game_mode": {"value": 0, "readable": True, "writeable": True},
+            "game_duration": {"value": 0, "readable": True, "writeable": True},
+            "game_fly_dur": {"value": 60, "readable": True, "writeable": True},
+            "game_e_vol": {"value": 0, "readable": True, "writeable": True},
+            "game_e_dur": {"value": 0, "readable": True, "writeable": True},
+            "game_p1_thresh": {"value": 0.0, "readable": True, "writeable": True},
+            "game_p2_thresh": {"value": 0.0, "readable": True, "writeable": True},
+            "game_m_dur": {"value": 0, "readable": True, "writeable": True},
+            "game_m_power": {"value": 0, "readable": True, "writeable": True},
+            "game_m_step": {"value": 0, "readable": True, "writeable": True},
+            "game_cooldown": {"value": 0, "readable": True, "writeable": True},
+            "game_kegel_t": {"value": 0, "readable": True, "writeable": True},
+            "game_cz_count": {"value": 0, "readable": True, "writeable": True},
         })
-        
-        self.pressure_thread = None
         self.report_thread = None
+        self.gameplay_thread = None
+        self._reset_game_state()
         
+    def _reset_game_state(self):
+        self._game_start_time = 0.0
+        self._active_e_stim_end = 0.0
+        self._active_motor_end = 0.0
+        self._cooldown_end_time = 0.0
+        self._current_motor_power = 0.0
+        self._no_kegel_time_ms = 0
+        self._last_game_mode = 0
+        self._cunzhi_count_armed = True
+        self._cunzhi_below_threshold_since = 0.0
+
+    def _max_voltage(self) -> int:
+        return 36 if int(self.properties["safe"]["value"]) == 1 else 75
+
+    def _clamp_voltage(self, value: Any) -> int:
+        try:
+            v = int(value)
+        except Exception:
+            v = 0
+        return max(0, min(self._max_voltage(), v))
+
+    def set_sensor_pressure(self, channel: str, value: Any):
+        if channel not in ("pressure", "pressure1"):
+            return
+        try:
+            v = float(value)
+        except Exception:
+            return
+        self.properties[channel]["value"] = max(0.0, v)
+
     def _device_init(self):
-        """初始化"""
         self.logger.info("CUNZHI01 device initialized")
-        self.pressure_thread = threading.Thread(target=self._pressure_simulation_task, daemon=True)
-        self.pressure_thread.start()
-        
         self.report_thread = threading.Thread(target=self._report_task, daemon=True)
         self.report_thread.start()
-        
+        self.gameplay_thread = threading.Thread(target=self._gameplay_task, daemon=True)
+        self.gameplay_thread.start()
+
     def _on_property_changed(self, property_name: str, value: Any, msg_id: int):
         if property_name == "power":
-            self.logger.info(f"Motor Power set to {value}")
+            try:
+                p = int(value)
+            except Exception:
+                p = 0
+            self.properties["power"]["value"] = max(0, min(255, p))
+            self.logger.info(f"Motor Power set to {self.properties['power']['value']}")
         elif property_name == "voltage":
-            self.logger.info(f"Pulse Voltage set to {value}")
-            
+            self.properties["voltage"]["value"] = self._clamp_voltage(value)
+            self.logger.info(f"Pulse Voltage set to {self.properties['voltage']['value']}")
+        elif property_name == "safe":
+            self.properties["safe"]["value"] = 1 if int(value) != 0 else 0
+            self.properties["voltage"]["value"] = self._clamp_voltage(
+                self.properties["voltage"]["value"])
+        elif property_name == "shock":
+            self.properties["shock"]["value"] = 1 if int(value) != 0 else 0
+        elif property_name == "report_delay_ms":
+            try:
+                d = int(value)
+            except Exception:
+                d = 5000
+            self.properties["report_delay_ms"]["value"] = max(100, min(10000, d))
+
     def _on_action(self, data: Dict[str, Any]):
         pass
-        
-    def _pressure_simulation_task(self):
-        """模拟压力变化"""
-        while self.running:
-            try:
-                # 模拟随机压力
-                p1 = random.randint(0, 5000)
-                p2 = random.randint(0, 5000)
-                self.properties["pressure"]["value"] = p1
-                self.properties["pressure1"]["value"] = p2
-                time.sleep(0.5)
-            except Exception:
-                pass
 
     def _report_task(self):
         """定期上报任务"""
@@ -874,7 +923,8 @@ class CUNZHI01Device(BaseVirtualDevice):
                     "method": "update",
                     "pressure": self.properties["pressure"]["value"],
                     "pressure1": self.properties["pressure1"]["value"],
-                    "battery": self.properties["battery"]["value"]
+                    "battery": self.properties["battery"]["value"],
+                    "game_cz_count": self.properties["game_cz_count"]["value"],
                 }
                 self._publish_message(report_data)
                 
@@ -882,6 +932,129 @@ class CUNZHI01Device(BaseVirtualDevice):
                 time.sleep(max(0.1, delay / 1000.0))
             except Exception:
                 time.sleep(1)
+
+    def _gameplay_task(self):
+        while self.running:
+            try:
+                self._gameplay_tick()
+                time.sleep(0.1)
+            except Exception as e:
+                self.logger.error(f"Error in gameplay: {e}")
+                time.sleep(0.1)
+
+    def _apply_outputs(self, power=None, voltage=None, shock=None):
+        if power is not None:
+            self.properties["power"]["value"] = max(0, min(255, int(power)))
+        if voltage is not None:
+            self.properties["voltage"]["value"] = self._clamp_voltage(voltage)
+        if shock is not None:
+            self.properties["shock"]["value"] = 1 if int(shock) != 0 else 0
+
+    def _on_game_mode_changed(self, now: float, mode: int):
+        self._last_game_mode = mode
+        self._game_start_time = now
+        self._active_e_stim_end = 0.0
+        self._active_motor_end = 0.0
+        self._cooldown_end_time = 0.0
+        self._current_motor_power = 0.0
+        self._no_kegel_time_ms = 0
+        self._cunzhi_count_armed = True
+        self._cunzhi_below_threshold_since = 0.0
+        self.properties["game_cz_count"]["value"] = 0
+        self._apply_outputs(power=0, voltage=0, shock=0)
+
+    def _gameplay_tick(self):
+        now = time.time()
+        mode = int(self.properties["game_mode"]["value"])
+        if mode != self._last_game_mode:
+            self._on_game_mode_changed(now, mode)
+        if mode == 0:
+            return
+        duration_s = int(self.properties["game_duration"]["value"])
+        if duration_s > 0 and (now - self._game_start_time) > duration_s:
+            self.properties["game_mode"]["value"] = 0
+            self._apply_outputs(power=0, voltage=0, shock=0)
+            return
+        if mode == 1:
+            self._tick_edging(now, duration_s)
+        elif mode == 2:
+            self._tick_kegel(now)
+
+    def _tick_edging(self, now: float, duration_s: int):
+        p1 = float(self.properties["pressure"]["value"])
+        p1_thresh = float(self.properties["game_p1_thresh"]["value"])
+        e_dur = int(self.properties["game_e_dur"]["value"])
+        e_vol = int(self.properties["game_e_vol"]["value"])
+        m_step = int(self.properties["game_m_step"]["value"])
+        cooldown = int(self.properties["game_cooldown"]["value"])
+        fly_dur_s = int(self.properties["game_fly_dur"]["value"])
+        if p1 < p1_thresh:
+            if self._cunzhi_below_threshold_since == 0.0:
+                self._cunzhi_below_threshold_since = now
+            elif (not self._cunzhi_count_armed and
+                  now - self._cunzhi_below_threshold_since >= 5.0):
+                self._cunzhi_count_armed = True
+        else:
+            self._cunzhi_below_threshold_since = 0.0
+        is_flying = False
+        if duration_s > 0 and fly_dur_s > 0:
+            remaining = duration_s - (now - self._game_start_time)
+            is_flying = 0 < remaining <= fly_dur_s
+        if now < self._cooldown_end_time:
+            if now > self._active_e_stim_end:
+                self._apply_outputs(shock=0, voltage=0)
+            self._current_motor_power = 0
+            self._apply_outputs(power=0)
+            return
+        if p1 > p1_thresh and not is_flying:
+            self._current_motor_power = 0
+            self._apply_outputs(power=0, voltage=e_vol, shock=1)
+            self._active_e_stim_end = now + e_dur / 1000.0
+            self._cooldown_end_time = self._active_e_stim_end + cooldown / 1000.0
+            if self._cunzhi_count_armed:
+                self.properties["game_cz_count"]["value"] += 1
+                self._cunzhi_count_armed = False
+            return
+        self._current_motor_power = min(255.0, self._current_motor_power + m_step * 0.1)
+        self._apply_outputs(power=int(self._current_motor_power))
+
+    def _tick_kegel(self, now: float):
+        p1 = float(self.properties["pressure"]["value"])
+        p2 = float(self.properties["pressure1"]["value"])
+        p1_thresh = float(self.properties["game_p1_thresh"]["value"])
+        p2_thresh = float(self.properties["game_p2_thresh"]["value"])
+        e_dur = int(self.properties["game_e_dur"]["value"])
+        e_vol = int(self.properties["game_e_vol"]["value"])
+        m_dur = int(self.properties["game_m_dur"]["value"])
+        m_power = int(self.properties["game_m_power"]["value"])
+        cooldown = int(self.properties["game_cooldown"]["value"])
+        kegel_t = int(self.properties["game_kegel_t"]["value"])
+        if p1 < p1_thresh:
+            self._no_kegel_time_ms += 100
+        else:
+            self._no_kegel_time_ms = 0
+        if now < self._cooldown_end_time:
+            if now > self._active_e_stim_end:
+                self._apply_outputs(shock=0, voltage=0)
+            if now > self._active_motor_end:
+                self._apply_outputs(power=0)
+            self._no_kegel_time_ms = 0
+            return
+        cond_tiptoe = p2 > p2_thresh
+        cond_kegel = self._no_kegel_time_ms >= kegel_t
+        triggered = False
+        if cond_tiptoe or cond_kegel:
+            self._apply_outputs(voltage=e_vol, shock=1)
+            self._active_e_stim_end = now + e_dur / 1000.0
+            triggered = True
+        if cond_kegel:
+            self._apply_outputs(power=m_power)
+            self._active_motor_end = now + m_dur / 1000.0
+            triggered = True
+        if triggered:
+            punish_end = max(self._active_e_stim_end, self._active_motor_end)
+            self._cooldown_end_time = punish_end + cooldown / 1000.0
+            self._no_kegel_time_ms = 0
 
 if __name__ == "__main__":
     # 测试代码

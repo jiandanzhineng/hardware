@@ -20,7 +20,7 @@ parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
-from virtual_devices import TD01Device, DianjiDevice, ZidongsuoDevice, QTZDevice, QiyaDevice, PJ01Device, DZC01Device, BaseVirtualDevice
+from virtual_devices import TD01Device, DianjiDevice, ZidongsuoDevice, QTZDevice, QiyaDevice, PJ01Device, DZC01Device, CUNZHI01Device, BaseVirtualDevice
 
 class DeviceGUIController:
     """设备GUI控制器主类"""
@@ -84,6 +84,8 @@ class DeviceGUIController:
                   command=lambda: self.create_device("QIYA")).pack(side=tk.LEFT, padx=5)
         ttk.Button(control_frame, text="创建DZC01电子秤", 
                   command=lambda: self.create_device("DZC01")).pack(side=tk.LEFT, padx=5)
+        ttk.Button(control_frame, text="创建CUNZHI01设备",
+                  command=lambda: self.create_device("CUNZHI01")).pack(side=tk.LEFT, padx=5)
         
         # 分隔符
         ttk.Separator(control_frame, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=10)
@@ -155,7 +157,7 @@ class DeviceGUIController:
     
     def auto_create_devices(self):
         """自动创建并启动所有设备类型"""
-        device_types = ["TD01", "PJ01", "DIANJI", "ZIDONGSUO", "QTZ", "QIYA", "DZC01"]
+        device_types = ["DIANJI", "ZIDONGSUO", "DZC01", "CUNZHI01"]
         
         for device_type in device_types:
             try:
@@ -197,6 +199,8 @@ class DeviceGUIController:
                 device = QiyaDevice(device_id)
             elif device_type == "DZC01":
                 device = DZC01Device(device_id)
+            elif device_type == "CUNZHI01":
+                device = CUNZHI01Device(device_id)
             else:
                 messagebox.showerror("错误", f"未知设备类型: {device_type}")
                 return
@@ -263,6 +267,20 @@ class DeviceGUIController:
         row = 0
         # 需要在GUI中隐藏的属性
         hidden_props = {"device_type", "sleep_time"}
+        pressure_slider_labels = {"pressure": "阔约压力", "pressure1": "踮脚压力"}
+        if device.device_type == "CUNZHI01":
+            for prop_name, label in pressure_slider_labels.items():
+                ttk.Label(props_frame, text=f"{label}:").grid(
+                    row=row, column=0, sticky="w", padx=3, pady=1)
+                scale = tk.Scale(
+                    props_frame, from_=0, to=200, orient=tk.HORIZONTAL, length=180,
+                    resolution=1, showvalue=True,
+                    command=lambda v, p=prop_name, did=device_id: self.set_pressure_slider(did, p, v))
+                scale.set(device.properties[prop_name]["value"])
+                scale.grid(row=row, column=1, columnspan=3, sticky="ew", padx=3, pady=1)
+                self.property_widgets[device_id][f"{prop_name}_scale"] = scale
+                hidden_props.add(prop_name)
+                row += 1
         for prop_name, prop_info in device.properties.items():
             # 跳过隐藏属性
             if prop_name in hidden_props:
@@ -289,7 +307,7 @@ class DeviceGUIController:
                                            command=lambda p=prop_name, e=entry: self.set_property(device_id, p, e.get()))
                         set_btn.grid(row=row, column=3, padx=3, pady=1)
                         
-                    elif prop_name in ["shock", "open", "display_on"]:
+                    elif prop_name in ["shock", "open", "display_on", "safe"]:
                         # 开关按钮
                         toggle_btn = ttk.Button(props_frame, text="切换", 
                                               command=lambda p=prop_name: self.toggle_property(device_id, p))
@@ -435,10 +453,12 @@ class DeviceGUIController:
         """设置设备属性"""
         if device_id in self.devices:
             try:
-                # 类型转换
-                if prop_name in ["power", "voltage", "delay", "low_band", "high_band", "report_delay_ms", "sleep_time", "display_mode", "display_contrast"]:
+                current = self.devices[device_id].properties[prop_name]["value"]
+                if isinstance(current, bool):
+                    value = bool(int(value))
+                elif isinstance(current, int) and not isinstance(current, bool):
                     value = int(float(value))
-                elif prop_name in ["pressure"]:
+                elif isinstance(current, float):
                     value = float(value)
                 
                 # 更新设备属性
@@ -513,6 +533,16 @@ class DeviceGUIController:
             
             threading.Thread(target=release_button, daemon=True).start()
     
+    def set_pressure_slider(self, device_id: str, prop_name: str, value: str):
+        """CUNZHI01 阔约/踮脚压力滑条"""
+        if device_id not in self.devices:
+            return
+        device = self.devices[device_id]
+        if hasattr(device, "set_sensor_pressure"):
+            device.set_sensor_pressure(prop_name, value)
+        elif prop_name in device.properties:
+            device.properties[prop_name]["value"] = float(value)
+
     def set_distance(self, device_id: str, distance_str: str):
         """设置QTZ设备距离"""
         if device_id in self.devices:
