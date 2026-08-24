@@ -28,6 +28,8 @@ jobs:
             config: "CONFIG_DEVICE_DZC01=y"
           - name: "CUNZHI01"
             config: "CONFIG_DEVICE_CUNZHI01=y"
+          - name: "RT01"
+            config: "CONFIG_DEVICE_RT01=y"
 
     steps:
     - name: Checkout repository
@@ -45,7 +47,7 @@ jobs:
         
         # 显示当前配置
         echo "Current device configuration:"
-        grep -E "CONFIG_DEVICE_(TD01|DIANJI|QTZ|ZIDONGSUO|PJ01|QIYA|DZC01|CUNZHI01)" sdkconfig || true
+        grep -E "CONFIG_DEVICE_(TD01|DIANJI|QTZ|ZIDONGSUO|PJ01|QIYA|DZC01|CUNZHI01|RT01)" sdkconfig || true
 
     - name: ESP-IDF Build and Merge
       uses: espressif/esp-idf-ci-action@v1
@@ -103,7 +105,7 @@ jobs:
         echo "" >> firmware_summary.md
         echo "Built firmware for the following device types:" >> firmware_summary.md
         echo "" >> firmware_summary.md
-        for device in TD01 DIANJI QTZ ZIDONGSUO PJ01 QIYA DZC01 CUNZHI01; do
+        for device in TD01 DIANJI QTZ ZIDONGSUO PJ01 QIYA DZC01 CUNZHI01 RT01; do
           for file in firmware-files/firmware-${device}/under_silicon_*.bin; do
             if [ -f "$file" ]; then
               filename=$(basename "$file")
