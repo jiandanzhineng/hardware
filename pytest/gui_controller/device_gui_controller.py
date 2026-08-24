@@ -20,7 +20,7 @@ parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
-from virtual_devices import TD01Device, DianjiDevice, ZidongsuoDevice, QTZDevice, QiyaDevice, PJ01Device, DZC01Device, CUNZHI01Device, BaseVirtualDevice
+from virtual_devices import TD01Device, DianjiDevice, ZidongsuoDevice, QTZDevice, QiyaDevice, PJ01Device, DZC01Device, CUNZHI01Device, RT01Device, BaseVirtualDevice
 
 class DeviceGUIController:
     """设备GUI控制器主类"""
@@ -86,6 +86,8 @@ class DeviceGUIController:
                   command=lambda: self.create_device("DZC01")).pack(side=tk.LEFT, padx=5)
         ttk.Button(control_frame, text="创建CUNZHI01设备",
                   command=lambda: self.create_device("CUNZHI01")).pack(side=tk.LEFT, padx=5)
+        ttk.Button(control_frame, text="创建RT01设备",
+                  command=lambda: self.create_device("RT01")).pack(side=tk.LEFT, padx=5)
         
         # 分隔符
         ttk.Separator(control_frame, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=10)
@@ -201,6 +203,8 @@ class DeviceGUIController:
                 device = DZC01Device(device_id)
             elif device_type == "CUNZHI01":
                 device = CUNZHI01Device(device_id)
+            elif device_type == "RT01":
+                device = RT01Device(device_id)
             else:
                 messagebox.showerror("错误", f"未知设备类型: {device_type}")
                 return

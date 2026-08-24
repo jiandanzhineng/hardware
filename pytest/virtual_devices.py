@@ -1056,6 +1056,72 @@ class CUNZHI01Device(BaseVirtualDevice):
             self._cooldown_end_time = punish_end + cooldown / 1000.0
             self._no_kegel_time_ms = 0
 
+
+class RT01Device(BaseVirtualDevice):
+    """RT01 乳头按摩：气泵 + 气压 + 电机"""
+
+    def __init__(self, device_id: str, **kwargs):
+        super().__init__(device_id, "RT01", **kwargs)
+        self.properties.update({
+            "pressure": {"value": 0.0, "readable": True, "writeable": False},
+            "target_pressure": {"value": 0.0, "readable": True, "writeable": True},
+            "min_pressure": {"value": -40.0, "readable": True, "writeable": True},
+            "deflate": {"value": 0, "readable": True, "writeable": True},
+            "motor": {"value": 0, "readable": True, "writeable": True},
+        })
+        self._suck_hold = False
+        self._sine_mode = False
+        self._motor_cycle = 0
+        self._sine_start = 0.0
+        self._loop_thread = None
+
+    def _device_init(self):
+        self._loop_thread = threading.Thread(target=self._control_loop, daemon=True)
+        self._loop_thread.start()
+
+    def _clamp_pressures(self):
+        min_p = max(-40.0, min(0.0, float(self.properties["min_pressure"]["value"])))
+        self.properties["min_pressure"]["value"] = min_p
+        target = float(self.properties["target_pressure"]["value"])
+        target = max(min_p, min(40.0, target))
+        self.properties["target_pressure"]["value"] = target
+
+    def _on_property_changed(self, property_name: str, value: Any, msg_id: int):
+        if property_name == "motor":
+            try:
+                speed = max(-100, min(100, int(value)))
+            except Exception:
+                speed = 0
+            self.properties["motor"]["value"] = speed
+            self._sine_mode = False
+            self._motor_cycle = 1 if speed > 0 else (2 if speed < 0 else 0)
+        elif property_name == "deflate":
+            self.properties["deflate"]["value"] = 1 if int(value) else 0
+        elif property_name in ("target_pressure", "min_pressure"):
+            self._clamp_pressures()
+
+    def _on_action(self, data: Dict[str, Any]):
+        if data.get("action") == "key_clicked":
+            pass
+
+    def _control_loop(self):
+        while self.running:
+            try:
+                p = float(self.properties["pressure"]["value"])
+                target = float(self.properties["target_pressure"]["value"])
+                min_p = float(self.properties["min_pressure"]["value"])
+                deflate = int(self.properties["deflate"]["value"]) != 0
+                if deflate:
+                    p = min(0.0, p + 1.5)
+                elif p > min_p and (self._suck_hold or p > target):
+                    p = max(min_p, p - 1.0)
+                self.properties["pressure"]["value"] = round(p, 2)
+                time.sleep(0.1)
+            except Exception as e:
+                self.logger.error(f"RT01 loop error: {e}")
+                time.sleep(1)
+
+
 if __name__ == "__main__":
     # 测试代码
     devices = []

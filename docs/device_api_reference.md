@@ -13,6 +13,7 @@
 - [QIYA 气压检测设备](#qiya-气压检测设备)
 - [DZC01 电子秤](#dzc01-电子秤)
 - [CUNZHI01 寸止01设备](#cunzhi01-寸止01设备)
+- [RT01 乳头按摩](#rt01-乳头按摩)
 - [MQTT通信协议](#mqtt通信协议)
 - [错误代码](#错误代码)
 
@@ -491,6 +492,40 @@ controller.getDeviceProperty('pj01001aabbcc', 'power');
   "voltage": 30,
   "msg_id": 6001
 }
+```
+
+---
+
+## RT01 乳头按摩
+
+**设备类型**: `RT01`
+**描述**: 负压吸附 + 电机揉搓。气泵吸气、电磁阀泄压、I2C 气压闭环、电机正反转/正弦转。
+
+### 设备属性
+
+| 属性名 | 类型 | 读写权限 | 描述 | 默认值 | 范围 |
+| --- | --- | --- | --- | --- | --- |
+| `pressure` | float | 只读 | 当前气压(kPa) | 0 | -40–40 |
+| `target_pressure` | float | 读写 | 目标气压，高于此值才吸 | 0 | >= `min_pressure` |
+| `min_pressure` | float | 读写 | 气压下限，触达则关泵 | -40 | -40–0 |
+| `deflate` | int | 读写 | 泄压 | 0 | 0=保压, 1=泄压 |
+| `motor` | int | 读写 | 电机强度 | 0 | -100–100，0=停 |
+
+无 `pump`、`motor_mode`、`report_delay_ms`。不上报温度。只走通用心跳 `report`。
+
+### 功能说明
+
+- 气路：泵开=吸，`deflate=1`=泄压，都关=保持。泄压时强制关泵。
+- 闭环：`pressure` > `target_pressure` 才吸；低于目标不操作。远程停吸把 `target_pressure` 改回 0。
+- KEY1 按住一直吸，KEY2 按住泄压，KEY3 点按切换 停→正转→反转→正弦(约10s)→停。
+- 正弦是本地状态；写 `motor` 会退出正弦。
+
+### 使用示例
+
+```json
+{"method":"set","key":"target_pressure","value":-15,"msg_id":4001}
+{"method":"set","key":"motor","value":60,"msg_id":4002}
+{"method":"set","key":"deflate","value":1,"msg_id":4003}
 ```
 
 ---

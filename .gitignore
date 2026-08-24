@@ -1,5 +1,6 @@
 .vscode
 build
+build_rt01
 *.zip
 *.pyc
 managed_components
@@ -7,6 +8,7 @@ managed_components
 sdkconfig
 sdkconfig.old
 sdkconfig.bak*
+sdkconfig.rt01
 
 *.log
 
