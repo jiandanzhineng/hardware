@@ -55,7 +55,11 @@ menu "Device Selectionaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 			bool "RT01"
 			help
 				RT01 nipple massager (pump + pressure + motor)
+
+		config DEVICE_DAN01
+			bool "DAN01"
+			help
+				DAN01 ten-axis attitude sensor (HLK-AS201)
 	endchoice
 
 endmenu
-  

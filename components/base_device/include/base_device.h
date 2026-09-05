@@ -15,6 +15,7 @@
 #define DEVICE_DZC01 8
 #define DEVICE_CUNZHI01 9
 #define DEVICE_RT01 10
+#define DEVICE_DAN01 11
 
 
 #ifdef CONFIG_DEVICE_TD01
@@ -76,6 +77,11 @@
     #define DEVICE_TYPE_INDEX DEVICE_RT01
     #define DEVICE_TYPE_NAME "RT01"
     #define CONNECTED_LED GPIO_NUM_10
+#endif
+
+#ifdef CONFIG_DEVICE_DAN01
+    #define DEVICE_TYPE_INDEX DEVICE_DAN01
+    #define DEVICE_TYPE_NAME "DAN01"
 #endif
 
 

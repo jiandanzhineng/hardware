@@ -530,6 +530,38 @@ controller.getDeviceProperty('pj01001aabbcc', 'power');
 
 ---
 
+## DAN01 十轴姿态传感器
+
+**设备类型**: `DAN01`
+**描述**: ESP32-C3 通过 UART 读取 HLK-AS201，加速度、角速度、磁场和四元数以原始小端 HEX 上报。
+
+### 设备属性
+
+| 属性名 | 类型 | 读写权限 | 描述 | 默认值 | 范围/单位 |
+| --- | --- | --- | --- | --- | --- |
+| `report_delay_ms` | int | 读写 | 周期更新间隔 | 200 | 50-10000 ms |
+| `accel` | string | 只读 | 加速度 XYZ 原始值 | `""` | 12 位 HEX，3xint16 |
+| `gyro` | string | 只读 | 角速度 XYZ 原始值 | `""` | 12 位 HEX，3xint16 |
+| `mag` | string | 只读 | 磁场 XYZ 原始值 | `""` | 12 位 HEX，3xint16 |
+| `quat` | string | 只读 | 四元数 Q0-Q3 原始值 | `""` | 16 位 HEX，4xint16 |
+| `temperature` | float | 只读 | 板上温度 | 0 | degC |
+| `height` | float | 只读 | 气压换算高度 | 0 | m |
+| `button0` | int | 只读 | 板载按键 | 0 | 0=松开，1=按下 |
+| `mag_accuracy` | int | 只读 | 磁力计精度 | 0 | 0-3 |
+
+HEX 字节顺序与 AS201 数据段一致。上层按小端 `int16` 解码后，`accel`、`gyro`、`mag`、`quat` 分别乘 `0.00478515625`、`0.0625`、`0.006103515625`、`0.000030517578125`。
+
+### 设备动作
+
+```json
+{"method":"action","action":"mag_cal_start"}
+{"method":"action","action":"mag_cal_end"}
+```
+
+按键下降沿上报 `{"method":"action","action":"key_clicked"}`。
+
+---
+
 ## MQTT通信协议
 
 ### 主题格式

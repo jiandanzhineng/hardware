@@ -6,8 +6,10 @@
 """
 
 import json
+import math
 import time
 import random
+import struct
 import threading
 import paho.mqtt.client as mqtt
 from abc import ABC, abstractmethod
@@ -1119,6 +1121,94 @@ class RT01Device(BaseVirtualDevice):
                 time.sleep(0.1)
             except Exception as e:
                 self.logger.error(f"RT01 loop error: {e}")
+                time.sleep(1)
+
+
+class DAN01Device(BaseVirtualDevice):
+    """DAN01 十轴姿态传感器。"""
+
+    def __init__(self, device_id: str, **kwargs):
+        super().__init__(device_id, "DAN01", **kwargs)
+        self.properties.update({
+            "report_delay_ms": {"value": 200, "readable": True, "writeable": True},
+            "accel": {"value": "000000000000", "readable": True, "writeable": False},
+            "gyro": {"value": "000000000000", "readable": True, "writeable": False},
+            "mag": {"value": "000000000000", "readable": True, "writeable": False},
+            "quat": {"value": "0080000000000000", "readable": True, "writeable": False},
+            "temperature": {"value": 25.0, "readable": True, "writeable": False},
+            "height": {"value": 0.0, "readable": True, "writeable": False},
+            "button0": {"value": 0, "readable": True, "writeable": False},
+            "mag_accuracy": {"value": 3, "readable": True, "writeable": False},
+        })
+        self.mag_calibrating = False
+        self._attitude_thread = None
+
+    @staticmethod
+    def _pack_i16(values):
+        raw = []
+        for value in values:
+            raw.append(max(-32768, min(32767, int(round(value)))))
+        return struct.pack("<" + "h" * len(raw), *raw).hex()
+
+    @classmethod
+    def _build_attitude_sample(cls, elapsed):
+        roll = math.radians(22.0 * math.sin(elapsed * 0.9))
+        pitch = math.radians(14.0 * math.sin(elapsed * 0.63))
+        yaw = math.radians((elapsed * 18.0) % 360.0)
+        cr, sr = math.cos(roll / 2), math.sin(roll / 2)
+        cp, sp = math.cos(pitch / 2), math.sin(pitch / 2)
+        cy, sy = math.cos(yaw / 2), math.sin(yaw / 2)
+        quat = (
+            cr * cp * cy + sr * sp * sy,
+            sr * cp * cy - cr * sp * sy,
+            cr * sp * cy + sr * cp * sy,
+            cr * cp * sy - sr * sp * cy,
+        )
+        return {
+            "accel": cls._pack_i16((
+                math.sin(pitch) * 9.81 / 0.00478515625,
+                -math.sin(roll) * 9.81 / 0.00478515625,
+                math.cos(roll) * math.cos(pitch) * 9.81 / 0.00478515625,
+            )),
+            "gyro": cls._pack_i16((
+                20 * math.cos(elapsed * 0.9) / 0.0625,
+                9 * math.cos(elapsed * 0.63) / 0.0625,
+                18 / 0.0625,
+            )),
+            "mag": cls._pack_i16((28 / 0.006103515625, 4 / 0.006103515625, 36 / 0.006103515625)),
+            "quat": cls._pack_i16(value / 0.000030517578125 for value in quat),
+            "temperature": round(25.0 + math.sin(elapsed / 20), 2),
+            "height": round(12.0 + math.sin(elapsed / 8) * 0.2, 3),
+            "button0": 0,
+            "mag_accuracy": 3,
+        }
+
+    def _device_init(self):
+        self._attitude_thread = threading.Thread(target=self._attitude_loop, daemon=True)
+        self._attitude_thread.start()
+
+    def _on_property_changed(self, property_name: str, value: Any, msg_id: int):
+        if property_name == "report_delay_ms":
+            self.properties[property_name]["value"] = max(50, min(10000, int(value)))
+
+    def _on_action(self, data: Dict[str, Any]):
+        action = data.get("action")
+        if action == "mag_cal_start":
+            self.mag_calibrating = True
+        elif action == "mag_cal_end":
+            self.mag_calibrating = False
+
+    def _attitude_loop(self):
+        started = time.monotonic()
+        while self.running:
+            try:
+                sample = self._build_attitude_sample(time.monotonic() - started)
+                for key, value in sample.items():
+                    self.properties[key]["value"] = value
+                self._publish_message({"method": "update", **sample})
+                time.sleep(self.properties["report_delay_ms"]["value"] / 1000.0)
+            except Exception as e:
+                self.logger.error(f"DAN01 loop error: {e}")
                 time.sleep(1)
 
 
