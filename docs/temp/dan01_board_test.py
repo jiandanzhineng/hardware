@@ -45,7 +45,11 @@ def main():
     parser.add_argument("--seconds", type=float, default=6.0)
     args = parser.parse_args()
 
-    with serial.Serial(args.port, args.baud, timeout=0.2) as port:
+    with serial.Serial(
+        args.port, args.baud, timeout=0.2, dsrdtr=False, rtscts=False
+    ) as port:
+        port.dtr = False
+        port.rts = False
         time.sleep(0.4)
         port.reset_input_buffer()
         write_line(port, "@DEBUG IDENTIFY")
@@ -55,6 +59,8 @@ def main():
         write_line(port, '@CMD {"method":"set","key":"report_delay_ms","value":100,"msg_id":7001}')
         write_line(port, '@CMD {"method":"get","key":"report_delay_ms","msg_id":7002}')
         data_lines = read_lines(port, args.seconds)
+        write_line(port, '@CMD {"method":"get","key":"battery","msg_id":7003}')
+        data_lines += read_lines(port, 2.0)
 
     identities = []
     messages = []
@@ -103,6 +109,16 @@ def main():
     if not -500 <= float(latest.get("height")) <= 9000:
         raise AssertionError(f"height out of range: {latest.get('height')}")
 
+    battery_response = next(
+        (item for item in messages if item.get("msg_id") == 7003 and item.get("key") == "battery"),
+        None,
+    )
+    if battery_response is None or not isinstance(battery_response.get("value"), int):
+        raise AssertionError("battery get did not return an int")
+    battery = battery_response["value"]
+    if not 0 <= battery <= 100:
+        raise AssertionError(f"battery out of range: {battery}")
+
     print(json.dumps({
         "ok": True,
         "port": args.port,
@@ -116,6 +132,8 @@ def main():
         "temperature": latest["temperature"],
         "height": latest["height"],
         "mag_accuracy": latest.get("mag_accuracy"),
+        "battery": battery,
+        "button0": latest.get("button0"),
     }, ensure_ascii=False, indent=2))
 
 

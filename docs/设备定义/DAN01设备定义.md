@@ -10,7 +10,7 @@
 - 设备类型：`DAN01`（新增时需按《新增设备类型指南》在固件中注册）
 - 设备类型数字：`11`（接在 `DEVICE_RT01 = 10` 之后）
 - 适用场景：姿态感知、倾斜/晃动检测、按键输入
-- 硬件版本：V1.0
+- 硬件版本：V1.2
 - 主控：ESP32-C3（4MB Flash）
 - 传感器：HLK-AS201（十轴：加速度 + 陀螺仪 + 磁力计 + 气压计）
 
@@ -18,17 +18,17 @@
 
 | 功能模块 | 信号名称 | GPIO | 类型 | 说明 |
 | :--- | :--- | :--- | :--- | :--- |
-| AS201 UART TX | AS201_TX | GPIO 0 | 输出 | 接 AS201 UART_RX（发命令） |
-| AS201 UART RX | AS201_RX | GPIO 1 | 输入 | 接 AS201 UART_TX（收数据） |
+| AS201 UART TX | AS201_TX | GPIO 18 | 输出 | 接 AS201 UART_RX（发命令） |
+| AS201 UART RX | AS201_RX | GPIO 19 | 输入 | 接 AS201 UART_TX（收数据） |
 | AS201 复位 | AS201_RST | GPIO 4 | 输出 | 低电平复位，上电拉低再拉高 |
 | 板载按键 | KEY | GPIO 5 | 输入上拉 | 低电平有效 |
-| 电池监测 | BAT_ADC | 待定 | ADC | 有电池，引脚待硬件确认 |
-| 电池监测使能 | BAT_EN | 待定 | 输出 | 高电平使能采样，用完拉低 |
-| 联网指示 | LED | 待定 | 输出 | 作 CONNECTED_LED，引脚待确认 |
+| 电池监测 | BAT_ADC | GPIO 0 | ADC | ADC1_CH0，27k/10k 分压 |
+| 电池监测使能 | BAT_EN | GPIO 1 | 输出 | 高电平使能采样，用完拉低 |
+| 联网指示 | LED | GPIO 10 | 输出 | LED_RUN，作 CONNECTED_LED，低电平点亮 |
 
-说明：ESP32-C3 的 GPIO0/1 不是 Strapping 脚，可作 UART。GPIO0/1 已被串口占用，电池 ADC 不能复用现有设备的 GPIO0/1。
+说明：引脚以 `ESP32-C3-DAN` 原理图 SCH V1.2 为准。GPIO18/19 作 AS201 UART，须关闭 USB Serial JTAG 次控制台。
 
-电池测量复用 `components/Battery`，引脚确认后接入。
+电池测量复用 `components/Battery`。
 
 ## 通用设备属性（与现有设备一致）
 
@@ -151,7 +151,7 @@
 - 新设备不接原工程 SoftAP / WebSocket 网页。
 - 磁力计要准航向需按说明书校准：下行 `mag_cal_start` / `mag_cal_end`，远离磁干扰 ≥20cm。
 - 不做设备内玩法。
-- 电池：采样前拉高 BAT_EN，采完拉低；引脚确认前不写死 GPIO。
+- 电池：采样前拉高 BAT_EN（GPIO1），采完拉低；ADC 为 GPIO0。
 - 属性列表按本文档表格顺序放入 `device_properties[]`。
 
 ## 与新增设备流程的对应关系

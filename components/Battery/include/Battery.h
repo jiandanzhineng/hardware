@@ -45,6 +45,11 @@
 #define BATTERY_ADC_CHANNEL ADC_CHANNEL_3
 #endif
 
+#ifdef CONFIG_DEVICE_DAN01
+#define BATTERY_ADC_EN GPIO_NUM_1
+#define BATTERY_ADC_CHANNEL ADC_CHANNEL_0
+#endif
+
 
 #ifndef BATTERY_ADC_CHANNEL
 // shutdown battery

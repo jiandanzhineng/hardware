@@ -8,6 +8,8 @@
 - DAN01 独立编译：`idf.py -B build_dan01 -D SDKCONFIG=sdkconfig.dan01 -D "SDKCONFIG_DEFAULTS=sdkconfig.defaults;sdkconfig.defaults.esp32c3;sdkconfig.defaults.dan01" build`
 - 2026-09-05 DAN01 开发板识别为 `USB-SERIAL CH340K (COM16)`。
 - DAN01 串口板测：`python docs/temp/dan01_board_test.py --port COM16`。
+- 2026-09-17 按 SCH V1.2 改引脚后，COM16 板测通过：身份 `f85b1b4d9564`，AS201 有数据，电池约 94%。
+- DAN01 V1.2：AS201 TX=GPIO18 RX=GPIO19 RST=GPIO4；KEY=GPIO5；BAT_ADC=GPIO0 BAT_EN=GPIO1；LED=GPIO10。须 `CONFIG_ESP_CONSOLE_SECONDARY_NONE`。
 
 ## 2026-09-05 DAN01 电池复查
 

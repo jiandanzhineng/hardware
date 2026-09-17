@@ -62,6 +62,7 @@ static esp_err_t battery_adc_init(void)
     return ESP_OK;
     #endif
     
+    gpio_set_direction(BATTERY_ADC_EN, GPIO_MODE_OUTPUT);
     gpio_set_level(BATTERY_ADC_EN, 1);
 
     // init adc

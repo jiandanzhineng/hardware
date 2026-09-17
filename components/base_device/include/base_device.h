@@ -82,6 +82,7 @@
 #ifdef CONFIG_DEVICE_DAN01
     #define DEVICE_TYPE_INDEX DEVICE_DAN01
     #define DEVICE_TYPE_NAME "DAN01"
+    #define CONNECTED_LED GPIO_NUM_10
 #endif
 
 

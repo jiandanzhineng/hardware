@@ -17,8 +17,8 @@
 static const char *TAG = "DAN01";
 
 #define AS201_UART          UART_NUM_1
-#define AS201_TX_GPIO       GPIO_NUM_0
-#define AS201_RX_GPIO       GPIO_NUM_1
+#define AS201_TX_GPIO       GPIO_NUM_18
+#define AS201_RX_GPIO       GPIO_NUM_19
 #define AS201_RST_GPIO      GPIO_NUM_4
 #define DAN01_KEY_GPIO      GPIO_NUM_5
 #define AS201_BAUD_RATE     115200
