@@ -1,19 +1,21 @@
 menu "SK board diagnostics"
-    config SK_LOCK_OUTPUT_VERIFIED
-        bool "Enable lock output ONLY after electrical corrections and bench checks"
-        default n
-        help
-            The supplied V1.0 schematic connects GPIO3 directly to a PMOS
-            gate pulled up to VBAT and shows no coil flyback protection.
-            Keep disabled on the unchanged board. First provide a 3.3V-safe
-            gate driver, defined OFF during reset/power loss, and appropriate
-            inductive suppression. Validate with a dummy load and scope.
-    config SK_LOCK_ACTIVE_LOW
-        bool "Corrected lock driver is active LOW"
-        depends on SK_LOCK_OUTPUT_VERIFIED
+    config SK_LOCK_OUTPUT_ENABLED
+        bool "Enable lock output for bench testing"
         default y
         help
-            Match the corrected interface. An NPN driving the PMOS gate
+            Enables manually armed, bounded lock pulses for bench testing.
+            This option does not indicate that the hardware is verified.
+            The supplied V1.0 schematic connects GPIO3 directly to a PMOS
+            gate pulled up to VBAT and shows no coil flyback protection.
+            Software cannot guarantee physical cutoff on that interface.
+            The 1000ms limit, 10s cooldown and manual arming remain active.
+    config SK_LOCK_ACTIVE_LOW
+        bool "Lock driver is active LOW"
+        depends on SK_LOCK_OUTPUT_ENABLED
+        default y
+        help
+            Matches the original V1.0 PMOS gate interface. An added NPN
+            driving the PMOS gate
             usually makes the MCU signal active HIGH; disable in that case.
     config SK_POWER_HOLD_PUSH_PULL
         bool "Q1 base series resistor has been fitted: use push-pull hold"

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
 set(IDF_TARGET esp32c3)
-set(PROJECT_VER "0.1.0-sk-test")
+set(PROJECT_VER "0.1.1-sk-test")
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 project(sk_board_test)

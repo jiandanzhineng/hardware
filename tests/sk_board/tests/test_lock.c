@@ -88,14 +88,14 @@ int main(int argc, char **argv)
 {
     policy_tests();
     assert(sk_lock_init() == ESP_OK);
-#if !CONFIG_SK_LOCK_OUTPUT_VERIFIED
+#if !CONFIG_SK_LOCK_OUTPUT_ENABLED
     (void)argc; (void)argv;
     assert(output_mode == GPIO_MODE_DISABLE);
     assert(!sk_lock_status().enabled);
     assert(sk_lock_pulse(100) == ESP_ERR_NOT_SUPPORTED);
     sk_lock_off();
     assert(output == -1 && energisations == 0);
-    puts("PASS default: GPIO high-Z; all pulse requests blocked; parser/ADC/key policy");
+    puts("PASS disabled configuration: GPIO high-Z; all pulse requests blocked; parser/ADC/key policy");
     return 0;
 #else
     assert(output == OFF);

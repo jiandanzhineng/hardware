@@ -6,7 +6,7 @@
 #include "esp_attr.h"
 #include "freertos/FreeRTOS.h"
 
-#if CONFIG_SK_LOCK_OUTPUT_VERIFIED
+#if CONFIG_SK_LOCK_OUTPUT_ENABLED
 #if !CONFIG_GPTIMER_ISR_IRAM_SAFE || !CONFIG_GPIO_CTRL_FUNC_IN_IRAM || !CONFIG_GPTIMER_CTRL_FUNC_IN_IRAM
 #error "Lock cutoff requires GPTimer/GPIO IRAM safety options"
 #endif

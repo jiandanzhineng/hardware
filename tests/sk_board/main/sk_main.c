@@ -159,8 +159,10 @@ static void identity(void)
     printf("[LIMIT] lock_on=UNLOCK; request=20..1000ms default=100ms cooldown=10000ms; no automatic pulses\n");
     printf("[HW] VLOCK comes from VBAT (not regulated 5V). No lock feedback/current/coil-temperature ADC.\n");
     printf("[HW] Original V1.0 needs GPIO3 level isolation and inductive suppression; GPIO1 needs base resistor.\n");
-#if !CONFIG_SK_LOCK_OUTPUT_VERIFIED
-    printf("[LOCK] DISABLED: hardware correction required; GPIO3 high-Z is NOT overvoltage protection.\n");
+#if CONFIG_SK_LOCK_OUTPUT_ENABLED
+    printf("[LOCK] ENABLED: use arm then pulse; boot cooldown=10000ms; hardware unverified.\n");
+#else
+    printf("[LOCK] DISABLED by build configuration; GPIO3 high-Z.\n");
 #endif
 #if !CONFIG_SK_POWER_HOLD_PUSH_PULL
     printf("[POWER] Weak internal pull-up hold; verify retention. Do not drive Q1 base push-pull without resistor.\n");

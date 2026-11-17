@@ -16,7 +16,7 @@ with tempfile.TemporaryDirectory(prefix="sk-lock-test-") as temp:
         path.write_text("/* Supplied by -include idf_stubs.h. */\n")
     for enabled, low in ((0, 0), (1, 1), (1, 0)):
         (temp / "sdkconfig.h").write_text(
-            f"#define CONFIG_SK_LOCK_OUTPUT_VERIFIED {enabled}\n"
+            f"#define CONFIG_SK_LOCK_OUTPUT_ENABLED {enabled}\n"
             f"#define CONFIG_SK_LOCK_ACTIVE_LOW {low}\n"
             "#define CONFIG_GPTIMER_ISR_IRAM_SAFE 1\n"
             "#define CONFIG_GPIO_CTRL_FUNC_IN_IRAM 1\n"
