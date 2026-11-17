@@ -84,9 +84,98 @@ static void policy_tests(void)
     assert(!sk_debounce_update(&k, true, 99999));
 }
 
+static void button_policy_tests(void)
+{
+    const uint8_t masks[] = {1, 2, 4};
+    const uint32_t durations[] = {100, 500, 1000};
+    for (int i = 0; i < 3; i++) {
+        sk_button_test_t b = {0};
+        /* A key already held at startup is not a request, even after cooldown. */
+        assert(sk_button_pulse_update(&b, masks[i], 0) == 0);
+        assert(sk_button_pulse_update(&b, masks[i], 20000000) == 0);
+        assert(sk_button_pulse_update(&b, 0, 20001000) == 0);
+        assert(sk_button_pulse_update(&b, 0, 20031000) == 0);
+        assert(sk_button_pulse_update(&b, masks[i], 20032000) == 0);
+        assert(sk_button_pulse_update(&b, masks[i], 20061999) == 0);
+        assert(sk_button_pulse_update(&b, masks[i], 20062000) == durations[i]);
+        /* A held key never repeats, even if its first request was rejected. */
+        assert(sk_button_pulse_update(&b, masks[i], 90000000) == 0);
+        /* A short release bounce must not re-arm the key. */
+        assert(sk_button_pulse_update(&b, 0, 90001000) == 0);
+        assert(sk_button_pulse_update(&b, masks[i], 90011000) == 0);
+        assert(sk_button_pulse_update(&b, masks[i], 90041000) == 0);
+        assert(sk_button_pulse_update(&b, 0, 90042000) == 0);
+        assert(sk_button_pulse_update(&b, 0, 90072000) == 0);
+        assert(sk_button_pulse_update(&b, masks[i], 90073000) == 0);
+        assert(sk_button_pulse_update(&b, masks[i], 90103000) == durations[i]);
+    }
+    sk_button_test_t b = {0};
+    assert(sk_button_pulse_update(&b, 0, 1000) == 0);
+    assert(sk_button_pulse_update(&b, 0, 31000) == 0);
+    /* A brief press is ignored, including when returning to released. */
+    assert(sk_button_pulse_update(&b, 4, 32000) == 0);
+    assert(sk_button_pulse_update(&b, 0, 42000) == 0);
+    assert(sk_button_pulse_update(&b, 0, 72000) == 0);
+    /* Stable chord followed by only one remaining key must not fire. */
+    assert(sk_button_pulse_update(&b, 3, 73000) == 0);
+    assert(sk_button_pulse_update(&b, 3, 103000) == 0);
+    assert(sk_button_pulse_update(&b, 1, 104000) == 0);
+    assert(sk_button_pulse_update(&b, 1, 134000) == 0);
+    assert(sk_button_pulse_update(&b, 0, 135000) == 0);
+    assert(sk_button_pulse_update(&b, 0, 165000) == 0);
+    assert(sk_button_pulse_update(&b, 4, 166000) == 0);
+    assert(sk_button_pulse_update(&b, 4, 196000) == 1000);
+}
+
+static void button_driver_tests(void)
+{
+    sk_button_test_t b = {0};
+    uint64_t t = clock_us;
+    assert(sk_button_pulse_update(&b, 0, t) == 0);
+    assert(sk_button_pulse_update(&b, 0, t + 30000) == 0);
+    assert(sk_button_pulse_update(&b, 1, t + 31000) == 0);
+    clock_us = t + 61000;
+    assert(sk_lock_pulse(sk_button_pulse_update(&b, 1, clock_us)) == ESP_OK);
+    uint64_t first_alarm = alarm_us;
+    assert(first_alarm == clock_us + 98000 && output == ON);
+    assert(sk_button_pulse_update(&b, 0, clock_us + 1000) == 0);
+    assert(sk_button_pulse_update(&b, 0, clock_us + 31000) == 0);
+    assert(sk_button_pulse_update(&b, 2, clock_us + 32000) == 0);
+    clock_us += 62000;
+    assert(sk_lock_pulse(sk_button_pulse_update(&b, 2, clock_us)) == ESP_ERR_INVALID_STATE);
+    assert(alarm_us == first_alarm); /* Another button cannot extend an active pulse. */
+    fire_at(first_alarm);
+    assert(output == OFF);
+    assert(sk_button_pulse_update(&b, 0, clock_us) == 0);
+    assert(sk_button_pulse_update(&b, 0, clock_us + 30000) == 0);
+    assert(sk_button_pulse_update(&b, 4, clock_us + 31000) == 0);
+    clock_us += 61000;
+    assert(sk_lock_pulse(sk_button_pulse_update(&b, 4, clock_us)) == ESP_ERR_INVALID_STATE);
+    assert(output == OFF && energisations == 1); /* Fresh press during cooldown is rejected. */
+    clock_us = first_alarm + SK_COOLDOWN_US;
+    assert(sk_button_pulse_update(&b, 4, clock_us) == 0); /* No queued retry after cooldown. */
+    for (int i = 1; i < 3; i++) {
+        const uint8_t mask = 1U << i;
+        const uint32_t expected_ms = i == 1 ? 500 : 1000;
+        assert(sk_button_pulse_update(&b, 0, clock_us) == 0);
+        assert(sk_button_pulse_update(&b, 0, clock_us + 30000) == 0);
+        assert(sk_button_pulse_update(&b, mask, clock_us + 31000) == 0);
+        clock_us += 61000;
+        uint32_t ms = sk_button_pulse_update(&b, mask, clock_us);
+        assert(ms == expected_ms && sk_lock_pulse(ms) == ESP_OK);
+        assert(alarm_us == clock_us + expected_ms * 1000 - SK_CUTOFF_MARGIN_US);
+        fire_at(alarm_us);
+        assert(output == OFF);
+        clock_us += SK_COOLDOWN_US;
+        assert(sk_button_pulse_update(&b, mask, clock_us) == 0);
+    }
+    assert(energisations == 3 && sk_lock_status().cutoffs == 3);
+}
+
 int main(int argc, char **argv)
 {
     policy_tests();
+    button_policy_tests();
     assert(sk_lock_init() == ESP_OK);
 #if !CONFIG_SK_LOCK_OUTPUT_ENABLED
     (void)argc; (void)argv;
@@ -102,7 +191,9 @@ int main(int argc, char **argv)
     assert(sk_lock_pulse(100) == ESP_ERR_INVALID_STATE); /* Boot cooldown. */
     clock_us = SK_COOLDOWN_US;
     const char *scenario = argc > 1 ? argv[1] : "normal";
-    if (!strcmp(scenario, "alarm_failure")) {
+    if (!strcmp(scenario, "buttons")) {
+        button_driver_tests();
+    } else if (!strcmp(scenario, "alarm_failure")) {
         alarm_failure = true;
         assert(sk_lock_pulse(100) == ESP_FAIL);
         assert(output == OFF && !energisations && sk_lock_status().fault);

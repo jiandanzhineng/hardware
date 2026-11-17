@@ -30,6 +30,6 @@ with tempfile.TemporaryDirectory(prefix="sk-lock-test-") as temp:
             str(ROOT / "tests/test_lock.c"), str(ROOT / "main/lock_control.c"),
             str(ROOT / "main/test_policy.c"), "-o", str(exe),
         ], check=True)
-        for scenario in (("normal", "alarm_failure", "read_failure", "gpio_failure") if enabled else ("disabled",)):
+        for scenario in (("normal", "buttons", "alarm_failure", "read_failure", "gpio_failure") if enabled else ("disabled",)):
             subprocess.run([str(exe), scenario], check=True)
-print("All 9 host scenarios passed (hardware/RTOS timing remains untested).")
+print("All 11 host scenarios passed (hardware/RTOS timing remains untested).")

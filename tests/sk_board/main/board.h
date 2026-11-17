@@ -15,6 +15,9 @@
 /* User requirement: at most one second energised. Not menuconfig-adjustable. */
 #define SK_MAX_PULSE_MS 1000U
 #define SK_DEFAULT_PULSE_MS 100U
+#define SK_KEY1_PULSE_MS 100U
+#define SK_KEY2_PULSE_MS 500U
+#define SK_BOOT_PULSE_MS 1000U
 #define SK_MIN_PULSE_MS 20U
 #define SK_COOLDOWN_US 10000000ULL
 #define SK_ARM_WINDOW_US 30000000LL

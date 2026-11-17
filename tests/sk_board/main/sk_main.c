@@ -45,6 +45,7 @@ static int64_t wifi_started_us;
 static int64_t armed_until_us;
 static adc_sample_t battery, power_key;
 static sk_debounce_t keys[4];
+static sk_button_test_t test_buttons;
 static uint32_t key_presses[4];
 static const char *key_names[] = {"K3/KEY1", "K4/KEY2", "K1/BOOT", "K5/POWER"};
 static const int key_pins[] = {SK_KEY1_GPIO, SK_KEY2_GPIO, SK_BOOT_GPIO};
@@ -160,7 +161,9 @@ static void identity(void)
     printf("[HW] VLOCK comes from VBAT (not regulated 5V). No lock feedback/current/coil-temperature ADC.\n");
     printf("[HW] Original V1.0 needs GPIO3 level isolation and inductive suppression; GPIO1 needs base resistor.\n");
 #if CONFIG_SK_LOCK_OUTPUT_ENABLED
-    printf("[LOCK] ENABLED: use arm then pulse; boot cooldown=10000ms; hardware unverified.\n");
+    printf("[LOCK] ENABLED: button pulses or serial arm/pulse; boot cooldown=10000ms; hardware unverified.\n");
+    printf("[KEY_MAP] K3/KEY1=%ums K4/KEY2=%ums K1/BOOT=%ums; buttons need no serial arm; release all before next press\n",
+           SK_KEY1_PULSE_MS, SK_KEY2_PULSE_MS, SK_BOOT_PULSE_MS);
 #else
     printf("[LOCK] DISABLED by build configuration; GPIO3 high-Z.\n");
 #endif
@@ -320,8 +323,28 @@ static void wifi_poll(void)
 static void help(void)
 {
     printf("[HELP] help | status | selftest | led on | led off | led test | wifi | arm | pulse [20..1000] | off | poweroff | reboot\n");
-    printf("[HELP] arm lasts 30s and permits ONE pulse; default pulse 100ms, cooldown 10s. Buttons only report events.\n");
-    printf("[HELP] K5: release once after boot, then hold >=3s to power off. No automatic unlocking.\n");
+    printf("[HELP] Serial arm lasts 30s and permits ONE pulse; default pulse 100ms, cooldown 10s.\n");
+    printf("[HELP] Buttons: K3=100ms K4=500ms BOOT=1000ms, no arm needed; release all then press ONE key; no repeat/queue.\n");
+    printf("[HELP] K5: release once after boot, then hold >=3s to power off. No startup pulses.\n");
+}
+
+static void request_pulse(uint32_t ms, const char *source)
+{
+    armed_until_us = 0;
+    battery = read_adc(0); /* Both input paths use a fresh calibrated sample. */
+    sk_lock_status_t s = sk_lock_status();
+    if (!s.enabled || s.fault || s.active || s.cooldown_ms || !battery_ok() || wifi_scanning || shutdown_requested) {
+        printf("[LOCK] PULSE REJECTED source=%s ms=%" PRIu32 " enabled=%d fault=%d active=%d cooldown_ms=%" PRIu32
+               " battery_ok=%d wifi=%d shutdown=%d; request discarded\n", source, ms,
+               s.enabled, s.fault, s.active, s.cooldown_ms, battery_ok(), wifi_scanning, shutdown_requested);
+        return;
+    }
+    esp_err_t err = sk_lock_pulse(ms);
+    if (err == ESP_OK) {
+        pulse_before_mv = sk_battery_mv(battery.mv);
+        pulse_min_mv = -1;
+    }
+    printf("[LOCK] source=%s pulse_ms=%" PRIu32 " result=%s; physical unlock unverified\n", source, ms, esp_err_to_name(err));
 }
 
 static void command(char *line)
@@ -359,19 +382,15 @@ static void command(char *line)
             printf("[LOCK] ARMED for one pulse within 30s\n");
         }
     } else if (!strcmp(cmd, "pulse")) {
-        battery = read_adc(0); /* Never energise from a stale console snapshot. */
         uint32_t ms = SK_DEFAULT_PULSE_MS;
         bool valid = !arg || sk_parse_duration(arg, &ms);
         bool armed = armed_until_us > esp_timer_get_time();
         armed_until_us = 0; /* Even a rejected request consumes the arm. */
-        if (!valid || !armed || !battery_ok() || wifi_scanning) {
-            printf("[LOCK] PULSE REJECTED duration_valid=%d armed=%d battery_ok=%d wifi=%d\n",
-                   valid, armed, battery_ok(), wifi_scanning); return;
+        if (!valid || !armed) {
+            printf("[LOCK] PULSE REJECTED duration_valid=%d armed=%d\n", valid, armed);
+            return;
         }
-        pulse_before_mv = sk_battery_mv(battery.mv);
-        pulse_min_mv = -1;
-        esp_err_t err = sk_lock_pulse(ms);
-        printf("[LOCK] pulse_ms=%" PRIu32 " result=%s; physical unlock unverified\n", ms, esp_err_to_name(err));
+        request_pulse(ms, "SERIAL");
     } else printf("[CMD] ERROR unknown command or arguments; type help\n");
 }
 
@@ -405,6 +424,7 @@ static void console_poll(void)
 
 static void poll_keys(int64_t now)
 {
+    uint8_t pressed_mask = 0;
     for (int i = 0; i < 4; i++) {
         bool pressed;
         if (i < 3) pressed = gpio_get_level(key_pins[i]) == 0;
@@ -413,6 +433,7 @@ static void poll_keys(int64_t now)
             power_key_hysteresis = sk_power_key_pressed(power_key_hysteresis, power_key.mv);
             pressed = power_key_hysteresis;
         }
+        if (i < 3 && pressed) pressed_mask |= 1U << i;
         if (sk_debounce_update(&keys[i], pressed, now)) {
             if (keys[i].stable) key_presses[i]++;
             printf("[KEY_EVENT] %s %s count=%" PRIu32 "\n", key_names[i],
@@ -426,6 +447,11 @@ static void poll_keys(int64_t now)
     if (power_key.valid && keys[3].stable && power_key_released) {
         if (!power_pressed_us) power_pressed_us = now;
         if (now - power_pressed_us >= 3000000) poweroff();
+    }
+    uint32_t ms = sk_button_pulse_update(&test_buttons, pressed_mask, now);
+    if (ms && !shutdown_requested) {
+        const char *source = pressed_mask == 1 ? key_names[0] : pressed_mask == 2 ? key_names[1] : key_names[2];
+        request_pulse(ms, source);
     }
 }
 

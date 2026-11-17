@@ -44,3 +44,30 @@ bool sk_debounce_update(sk_debounce_t *key, bool pressed, int64_t now_us)
     }
     return false;
 }
+
+_Static_assert(SK_KEY1_PULSE_MS >= SK_MIN_PULSE_MS && SK_KEY1_PULSE_MS <= SK_MAX_PULSE_MS, "KEY1 duration");
+_Static_assert(SK_KEY2_PULSE_MS >= SK_MIN_PULSE_MS && SK_KEY2_PULSE_MS <= SK_MAX_PULSE_MS, "KEY2 duration");
+_Static_assert(SK_BOOT_PULSE_MS >= SK_MIN_PULSE_MS && SK_BOOT_PULSE_MS <= SK_MAX_PULSE_MS, "BOOT duration");
+
+uint32_t sk_button_pulse_update(sk_button_test_t *buttons, uint8_t pressed_mask, int64_t now_us)
+{
+    if (!buttons->initialized || pressed_mask != buttons->candidate_mask) {
+        buttons->initialized = true;
+        buttons->candidate_mask = pressed_mask;
+        buttons->since_us = now_us;
+        return 0;
+    }
+    if (now_us - buttons->since_us < 30000) return 0;
+    if (pressed_mask == 0) {
+        buttons->released = true;
+        return 0;
+    }
+    if (!buttons->released) return 0;
+    buttons->released = false; /* Holds, chords and rejected attempts consume the press. */
+    switch (pressed_mask) {
+    case 1: return SK_KEY1_PULSE_MS;
+    case 2: return SK_KEY2_PULSE_MS;
+    case 4: return SK_BOOT_PULSE_MS;
+    default: return 0; /* Multiple keys: require all keys released before another attempt. */
+    }
+}
