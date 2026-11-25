@@ -11,6 +11,7 @@
 #include "base_device.h"
 #include "device_identity.h"
 #include "esp_wifi.h"
+#include "smqtt.h"
 
 #define TAG "DEVICE_BLE"
 
@@ -158,7 +159,7 @@ static void build_gatt_table(void) {
     gatt_db[idx].att_desc.value = (uint8_t *)&char_prop_write;
     idx++;
 
-    gatt_db[idx].attr_control.auto_rsp = ESP_GATT_AUTO_RSP;
+    gatt_db[idx].attr_control.auto_rsp = ESP_GATT_RSP_BY_APP;
     gatt_db[idx].att_desc.uuid_length = ESP_UUID_LEN_16;
     gatt_db[idx].att_desc.uuid_p = (uint8_t *)&mode_char_uuid;
     gatt_db[idx].att_desc.perm = ESP_GATT_PERM_WRITE;
@@ -319,23 +320,50 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_
                     s_message_notify_enabled = (cfg == 0x0001);
                 }
             } else if (handle_table[IDX_MODE_VAL] == param->write.handle) {
-                if (param->write.len > 0) {
+                esp_gatt_status_t status = ESP_GATT_OK;
+                bool trigger_ready = false;
+                if (param->write.is_prep) {
+                    status = ESP_GATT_REQ_NOT_SUPPORTED;
+                } else if (param->write.len != sizeof(mode_value)) {
+                    status = ESP_GATT_INVALID_ATTR_LEN;
+                } else {
                     uint8_t v = param->write.value[0];
-                    mode_value[0] = v;
                     if (v == 0x01) {
-                        g_device_mode = MODE_BLE;
-                        esp_wifi_stop();
-                        ESP_LOGI(TAG, "Mode: BLE");
-                        esp_err_t ready_err = device_first_ready();
-                        if (ready_err != ESP_OK) {
-                            ESP_LOGE(TAG, "Device first-ready failed: %s",
-                                     esp_err_to_name(ready_err));
+                        if (!app_enter_ble_mode()) {
+                            ESP_LOGW(TAG, "Reject BLE mode switch: BLE release in progress");
+                            status = ESP_GATT_BUSY;
+                        } else {
+                            mode_value[0] = v;
+                            esp_ble_gatts_set_attr_value(handle_table[IDX_MODE_VAL], sizeof(mode_value), mode_value);
+                            mqtt_app_stop();
+                            esp_wifi_stop();
+                            ESP_LOGI(TAG, "Mode: BLE");
+                            trigger_ready = true;
                         }
                     } else if (v == 0x00) {
-                        g_device_mode = MODE_WIFI;
+                        mode_value[0] = v;
+                        esp_ble_gatts_set_attr_value(handle_table[IDX_MODE_VAL], sizeof(mode_value), mode_value);
+                        app_enter_wifi_mode();
                         esp_wifi_start();
                         ESP_LOGI(TAG, "Mode: WiFi");
+                    } else {
+                        mode_value[0] = v;
+                        esp_ble_gatts_set_attr_value(handle_table[IDX_MODE_VAL], sizeof(mode_value), mode_value);
                     }
+                }
+                if (param->write.need_rsp) {
+                    esp_ble_gatts_send_response(gatts_if, param->write.conn_id,
+                                                param->write.trans_id, status, NULL);
+                }
+                if (trigger_ready) {
+                    esp_err_t ready_err = device_first_ready();
+                    if (ready_err != ESP_OK) {
+                        ESP_LOGE(TAG, "Device first-ready failed: %s",
+                                 esp_err_to_name(ready_err));
+                    }
+                }
+                if (status != ESP_GATT_OK) {
+                    break;
                 }
             } else if (handle_table[IDX_COMMAND_VAL] == param->write.handle) {
                 ESP_LOGI(TAG, "Received command %d bytes:", param->write.len);

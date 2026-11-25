@@ -14,6 +14,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/lock.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/event_groups.h"
@@ -48,9 +49,31 @@
 #define EXAMPLE_INVALID_REASON 255
 
 static const char *BLE_RELEASE_TAG = "BLE_RELEASE";
+static _lock_t s_ble_mode_lock = 0;
 static bool s_ble_resources_released = false;
+static bool s_ble_releasing = false;
 static bool s_ble_runtime_ready = false;
 static bool s_ble_release_pending = false;
+
+bool app_enter_ble_mode(void)
+{
+    bool entered = false;
+    _lock_acquire(&s_ble_mode_lock);
+    if (!s_ble_releasing && !s_ble_resources_released) {
+        g_device_mode = MODE_BLE;
+        s_ble_release_pending = false;
+        entered = true;
+    }
+    _lock_release(&s_ble_mode_lock);
+    return entered;
+}
+
+void app_enter_wifi_mode(void)
+{
+    _lock_acquire(&s_ble_mode_lock);
+    g_device_mode = MODE_WIFI;
+    _lock_release(&s_ble_mode_lock);
+}
 
 static void log_ble_release_heap(const char *stage)
 {
@@ -63,16 +86,31 @@ static void log_ble_release_heap(const char *stage)
 
 void app_release_ble_resources(const char *reason)
 {
-    if (s_ble_resources_released) {
-        ESP_LOGI(BLE_RELEASE_TAG, "BLE resources already released");
+    _lock_acquire(&s_ble_mode_lock);
+    if (s_ble_resources_released || s_ble_releasing) {
+        _lock_release(&s_ble_mode_lock);
+        ESP_LOGI(BLE_RELEASE_TAG, "BLE resources already released or releasing");
+        return;
+    }
+
+    if (g_device_mode == MODE_BLE || !smqtt_connected) {
+        s_ble_release_pending = false;
+        _lock_release(&s_ble_mode_lock);
+        ESP_LOGI(BLE_RELEASE_TAG, "Skip BLE release (mode=%d, mqtt_connected=%d): %s",
+                 (int)g_device_mode, (int)smqtt_connected, reason ? reason : "no reason");
         return;
     }
 
     if (!s_ble_runtime_ready) {
-        ESP_LOGI(BLE_RELEASE_TAG, "BLE runtime is not ready, defer release: %s", reason ? reason : "no reason");
         s_ble_release_pending = true;
+        _lock_release(&s_ble_mode_lock);
+        ESP_LOGI(BLE_RELEASE_TAG, "BLE runtime is not ready, defer release: %s", reason ? reason : "no reason");
         return;
     }
+
+    s_ble_releasing = true;
+    s_ble_release_pending = false;
+    _lock_release(&s_ble_mode_lock);
 
     ESP_LOGI(BLE_RELEASE_TAG, "release BLE resources: %s", reason ? reason : "no reason");
     log_ble_release_heap("before release");
@@ -108,9 +146,12 @@ void app_release_ble_resources(const char *reason)
         ESP_LOGW(BLE_RELEASE_TAG, "esp_bt_controller_mem_release(BLE) failed: %s", esp_err_to_name(ret));
     }
 
+    _lock_acquire(&s_ble_mode_lock);
     s_ble_resources_released = true;
+    s_ble_releasing = false;
     s_ble_runtime_ready = false;
     s_ble_release_pending = false;
+    _lock_release(&s_ble_mode_lock);
     log_ble_release_heap("after release");
 }
 #define EXAMPLE_INVALID_RSSI -128
@@ -211,9 +252,9 @@ static void default_wifi_attempt_task(void *arg)
         vTaskDelay(pdMS_TO_TICKS(5000));
         EventBits_t bits = xEventGroupGetBits(wifi_event_group);
 
-        // If BLE is connected (provisioning ongoing), skip default attempt
-        if (ble_is_connected) {
-            BLUFI_INFO("BLE connected; skip default WiFi attempt\n");
+        // If BLE is connected or BLE mode is active, skip default attempt
+        if (ble_is_connected || g_device_mode == MODE_BLE) {
+            BLUFI_INFO("BLE active; skip default WiFi attempt\n");
             vTaskDelete(NULL);
             return;
         }
@@ -276,6 +317,21 @@ static void ip_event_handler(void *arg, esp_event_base_t event_base,
     {
     case IP_EVENT_STA_GOT_IP:
     {
+        bool can_report_got_ip = false;
+        _lock_acquire(&s_ble_mode_lock);
+        if (g_device_mode != MODE_BLE && gl_sta_connected)
+        {
+            gl_sta_got_ip = true;
+            can_report_got_ip = true;
+        }
+        _lock_release(&s_ble_mode_lock);
+
+        if (!can_report_got_ip)
+        {
+            BLUFI_INFO("Ignore IP_EVENT_STA_GOT_IP (mode=%d, connected=%d)\n",
+                       (int)g_device_mode, (int)gl_sta_connected);
+            break;
+        }
         esp_blufi_extra_info_t info;
 
         xEventGroupSetBits(wifi_event_group, CONNECTED_BIT);
@@ -286,15 +342,23 @@ static void ip_event_handler(void *arg, esp_event_base_t event_base,
         info.sta_bssid_set = true;
         info.sta_ssid = gl_sta_ssid;
         info.sta_ssid_len = gl_sta_ssid_len;
-        gl_sta_got_ip = true;
         // ota_service_init(); // Auto OTA removed
-        if (ble_is_connected == true)
+        bool can_send_blufi = false;
+        _lock_acquire(&s_ble_mode_lock);
+        can_send_blufi = (g_device_mode != MODE_BLE &&
+                          !s_ble_releasing &&
+                          !s_ble_resources_released &&
+                          ble_is_connected &&
+                          gl_sta_connected);
+        _lock_release(&s_ble_mode_lock);
+        if (can_send_blufi)
         {
             esp_blufi_send_wifi_conn_report(mode, ESP_BLUFI_STA_CONN_SUCCESS, softap_get_current_connection_number(), &info);
         }
         else
         {
-            BLUFI_INFO("BLUFI BLE is not connected yet\n");
+            BLUFI_INFO("Skip BLUFI WiFi conn report (ble=%d, mode=%d)\n",
+                       (int)ble_is_connected, (int)g_device_mode);
         }
         break;
     }
@@ -315,10 +379,29 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
     {
     case WIFI_EVENT_STA_START:
         BLUFI_INFO("BLUFI WIFI_EVENT_STA_START\n");
-        example_wifi_connect();
+        if (g_device_mode != MODE_BLE)
+        {
+            example_wifi_connect();
+        }
+        break;
+    case WIFI_EVENT_STA_STOP:
+        BLUFI_INFO("BLUFI WIFI_EVENT_STA_STOP\n");
+        gl_sta_connected = false;
+        gl_sta_is_connecting = false;
+        gl_sta_got_ip = false;
+        memset(gl_sta_ssid, 0, 32);
+        memset(gl_sta_bssid, 0, 6);
+        gl_sta_ssid_len = 0;
+        xEventGroupClearBits(wifi_event_group, CONNECTED_BIT);
+        mqtt_app_stop();
         break;
     case WIFI_EVENT_STA_CONNECTED:
         BLUFI_INFO("BLUFI WIFI_EVENT_STA_CONNECTED\n");
+        if (g_device_mode == MODE_BLE)
+        {
+            BLUFI_INFO("Ignore WIFI_EVENT_STA_CONNECTED in BLE mode\n");
+            break;
+        }
         gl_sta_connected = true;
         gl_sta_is_connecting = false;
         event = (wifi_event_sta_connected_t *)event_data;
@@ -330,7 +413,11 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
     case WIFI_EVENT_STA_DISCONNECTED:
         BLUFI_INFO("BLUFI WIFI_EVENT_STA_DISCONNECTED\n");
         /* Only handle reconnection during connecting */
-        if (gl_sta_connected == false && example_wifi_reconnect() == false)
+        if (g_device_mode == MODE_BLE)
+        {
+            gl_sta_is_connecting = false;
+        }
+        else if (gl_sta_connected == false && example_wifi_reconnect() == false)
         {
             gl_sta_is_connecting = false;
             disconnected_event = (wifi_event_sta_disconnected_t *)event_data;
@@ -344,6 +431,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
         memset(gl_sta_bssid, 0, 6);
         gl_sta_ssid_len = 0;
         xEventGroupClearBits(wifi_event_group, CONNECTED_BIT);
+        mqtt_app_stop();
         break;
     case WIFI_EVENT_AP_START:
         BLUFI_INFO("BLUFI WIFI_EVENT_AP_START\n");
@@ -724,8 +812,12 @@ void app_main(void)
     BLUFI_INFO("BLUFI VERSION %04x\n", esp_blufi_get_version());
 
     device_ble_service_init();
+    bool deferred_release = false;
+    _lock_acquire(&s_ble_mode_lock);
     s_ble_runtime_ready = true;
-    if (s_ble_release_pending) {
+    deferred_release = s_ble_release_pending;
+    _lock_release(&s_ble_mode_lock);
+    if (deferred_release) {
         app_release_ble_resources("deferred mqtt connected");
     }
 

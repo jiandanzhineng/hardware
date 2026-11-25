@@ -341,7 +341,8 @@ void device_handle_action(cJSON *root)
     on_action(root);
 }
 
-void device_handle_receive(char *topic, int topic_len, char *data, int data_len)
+void device_handle_receive_checked(char *topic, int topic_len, char *data, int data_len,
+                                   device_receive_validate_fn_t validate_fn, void *ctx)
 {
     if (!topic || topic_len < 0 || !data || data_len <= 0) {
         ESP_LOGW(TAG, "Invalid receive arguments");
@@ -354,6 +355,14 @@ void device_handle_receive(char *topic, int topic_len, char *data, int data_len)
 
     if (s_receive_mutex) {
         xSemaphoreTakeRecursive(s_receive_mutex, portMAX_DELAY);
+    }
+
+    if (validate_fn && !validate_fn(ctx)) {
+        ESP_LOGI(TAG, "Ignoring stale command after acquiring receive mutex");
+        if (s_receive_mutex) {
+            xSemaphoreGiveRecursive(s_receive_mutex);
+        }
+        return;
     }
 
     ESP_LOGI(TAG, "receive source: %.*s, data: %.*s", topic_len, topic, data_len, data);
@@ -466,6 +475,11 @@ void device_handle_receive(char *topic, int topic_len, char *data, int data_len)
     if (s_receive_mutex) {
         xSemaphoreGiveRecursive(s_receive_mutex);
     }
+}
+
+void device_handle_receive(char *topic, int topic_len, char *data, int data_len)
+{
+    device_handle_receive_checked(topic, topic_len, data, data_len, NULL, NULL);
 }
 
 void mqtt_msg_process(char *topic, int topic_len, char *data, int data_len)
@@ -591,12 +605,18 @@ void get_property(char *property_name, int msg_id)
     device_publish_message(root);
 }
 
+__attribute__((weak)) int smqtt_publish_message(const char *json_data)
+{
+    if (smqtt_connected && smqtt_client && json_data) {
+        ESP_LOGI(TAG, "publish(mqtt): %s", json_data);
+        return esp_mqtt_client_publish(smqtt_client, publish_topic, json_data, 0, 1, 0);
+    }
+    return -1;
+}
+
 static void device_publish_serialized(const char *json_data, bool include_ble)
 {
-    if (smqtt_connected && smqtt_client) {
-        ESP_LOGI(TAG, "publish(mqtt): %s", json_data);
-        esp_mqtt_client_publish(smqtt_client, publish_topic, json_data, 0, 1, 0);
-    }
+    smqtt_publish_message(json_data);
 
     if (device_serial_debug_is_active()) {
         esp_err_t err = device_serial_debug_send_payload(json_data, strlen(json_data));
