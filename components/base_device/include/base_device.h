@@ -122,8 +122,12 @@ extern int device_properties_num;
     
 
 
+typedef bool (*device_receive_validate_fn_t)(void *ctx);
+
 void mqtt_msg_process(char *topic, int topic_len, char *data, int data_len);
 void device_handle_receive(char *topic, int topic_len, char *data, int data_len);
+void device_handle_receive_checked(char *topic, int topic_len, char *data, int data_len,
+                                   device_receive_validate_fn_t validate_fn, void *ctx);
 void device_handle_action(cJSON *root);
 esp_err_t set_property(char *property_name, cJSON *property_value, int msg_id);
 void get_property(char *property_name, int msg_id);

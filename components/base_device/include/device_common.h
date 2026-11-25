@@ -42,9 +42,14 @@ extern esp_mqtt_client_handle_t smqtt_client;
 extern char publish_topic[32];
 extern volatile bool smqtt_connected;
 
+int smqtt_publish_message(const char *json_data);
+
 typedef enum { MODE_WIFI = 0, MODE_BLE = 1 } device_mode_t;
 extern volatile device_mode_t g_device_mode;
 extern volatile int g_device_first_ready_called;
+
+bool app_enter_ble_mode(void);
+void app_enter_wifi_mode(void);
 
 
 void on_mqtt_msg_process(char *topic, cJSON *root);
